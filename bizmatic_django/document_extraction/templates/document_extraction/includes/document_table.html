@@ -1,0 +1,19 @@
+<div class="table-responsive scrollbar">
+  <table class="table table-sm table-hover align-middle mb-0 document-table">
+    <caption class="visually-hidden">Uploaded documents with type, batch, processing status, and review status</caption>
+    <thead class="bg-200 text-900"><tr><th scope="col" class="ps-4">File name</th><th scope="col">Type</th><th scope="col">Batch</th><th scope="col">Processing</th><th scope="col">Review</th><th scope="col" class="pe-4 text-end">Action</th></tr></thead>
+    <tbody>
+      {% for document in documents %}
+      <tr>
+        <td class="ps-4"><div class="d-flex align-items-center gap-3"><span class="file-icon bg-{{ document.color }}-subtle text-{{ document.color }}"><span class="fas fa-{{ document.icon }}" aria-hidden="true"></span></span><div><a class="fw-semi-bold text-900" href="{% url 'DOC_EXTRACTION:document_detail' document.document_no %}">{{ document.file_name }}</a><div class="fs-11 text-600 mt-1">{{ document.extension }} <span class="mx-1">·</span> #{{ document.document_no }}</div></div></div></td>
+        <td>{{ document.document_type }}</td>
+        <td>{% if document.fk_batch_no_id %}<a href="{% url 'DOC_EXTRACTION:batch_detail' document.fk_batch_no_id %}">#{{ document.fk_batch_no_id }}</a>{% else %}<span class="text-600">Unassigned</span>{% endif %}</td>
+        <td><span class="badge rounded-pill badge-subtle-{{ document.processing_color }}">{{ document.processing_label }}</span></td>
+        <td><span class="badge rounded-pill badge-subtle-{{ document.review_color }}">{{ document.review_label }}</span></td>
+        <td class="pe-4 text-end"><a class="btn btn-link btn-sm px-0" href="{% url 'DOC_EXTRACTION:document_detail' document.document_no %}" aria-label="Open {{ document.file_name }}">Open <span class="fas fa-chevron-right ms-1 fs-11" aria-hidden="true"></span></a></td>
+      </tr>
+      {% empty %}<tr><td colspan="6" class="text-center text-600 py-5">No documents found.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% include 'document_extraction/includes/pagination.html' %}

@@ -1,0 +1,17 @@
+{% extends 'document_extraction/base.html' %}
+{% load static %}
+{% block breadcrumbs %}<nav aria-label="Breadcrumb"><ol class="breadcrumb fs-10 mb-3"><li class="breadcrumb-item"><a href="{% url 'DOC_EXTRACTION:document_detail' document.document_no %}">Document #{{ document.document_no }}</a></li><li class="breadcrumb-item active">{{ page_title }}</li></ol></nav>{% endblock %}
+{% block content %}
+<div class="page-heading mb-4"><h1 class="fs-6 mb-1">{{ page_title }}</h1><p class="text-600 mb-0 text-break">{{ document.file_name }}</p></div>
+<div class="row g-3 mb-4">
+  {% if show_original %}<div class="col-lg-6">{% include 'document_extraction/includes/file_preview.html' %}</div>{% endif %}
+  <div class="{% if show_original %}col-lg-6{% else %}col-lg-8{% endif %}"><section class="card"><div class="card-body">
+    <form method="post">{% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endfor %}
+      {% for field in form %}{% if field.is_hidden %}{{ field }}{% else %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<p class="text-danger fs-10 mb-0">{{ error }}</p>{% endfor %}</div>{% endif %}{% endfor %}
+      <div class="d-flex flex-wrap gap-2"><button type="submit" class="btn btn-primary">{{ submit_label }}</button><a class="btn btn-falcon-default" href="{% url 'DOC_EXTRACTION:document_detail' document.document_no %}">Cancel</a></div>
+    </form>
+  </div></section></div>
+</div>
+{% endblock %}
+{% block scripts %}{% if show_original %}<script src="{% static 'document_extraction/vendors/jszip.min.js' %}"></script><script src="{% static 'document_extraction/document-review.js' %}?v=5" defer></script>{% endif %}{% endblock %}

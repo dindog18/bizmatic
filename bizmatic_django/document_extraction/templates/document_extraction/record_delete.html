@@ -1,0 +1,9 @@
+{% extends 'document_extraction/base.html' %}
+{% block content %}
+<section class="card my-4"><div class="card-body">
+  <h1 class="fs-6 mb-3">{{ page_title }}?</h1><p class="text-break">{{ document.file_name }}</p>
+  {% if deleting_document %}<p>This removes the document record and all its text and LLM extraction logs. The original file stays on disk.</p>{% else %}<p>This removes this extraction from the document's history. The document and its original file are kept.</p>{% endif %}
+  <p class="text-danger">This deletion cannot be undone.</p>
+  <form method="post" class="d-flex flex-wrap gap-2">{% csrf_token %}<input type="hidden" name="confirm" value="yes"><button class="btn btn-danger" type="submit">Confirm deletion</button><a class="btn btn-falcon-default" href="{{ cancel_url }}">Cancel</a></form>
+</div></section>
+{% endblock %}

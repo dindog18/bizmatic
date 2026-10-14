@@ -1,0 +1,25 @@
+{% extends 'document_extraction/base.html' %}
+{% block content %}
+<div class="page-heading d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+  <div><h1 class="fs-6 mb-1">Batches</h1><p class="text-600 mb-0">View document groups and their processing progress.</p></div>
+</div>
+<section class="card mb-4" aria-labelledby="batches-heading">
+  <div class="card-header d-flex align-items-center justify-content-between"><h2 class="fs-9 mb-0" id="batches-heading">All batches <span class="badge badge-subtle-secondary ms-2">{{ page_obj.paginator.count }}</span></h2><span class="fs-10 text-600">Most recent first</span></div>
+  <div class="table-responsive scrollbar">
+    <table class="table table-hover align-middle mb-0 fs-10">
+      <caption class="visually-hidden">Batches with their identifiers, timestamps, and document counts</caption>
+      <thead class="bg-200 text-900 text-nowrap"><tr><th scope="col" class="ps-4">Batch number</th><th scope="col">Documents</th><th scope="col">Completed documents</th><th scope="col">Created</th><th scope="col">Updated</th><th scope="col" class="pe-4 text-end">Action</th></tr></thead>
+      <tbody>{% for batch in batches %}
+        <tr>
+          <td class="ps-4 py-4"><div class="d-flex align-items-center gap-3"><span class="file-icon bg-primary-subtle text-primary"><span class="fas fa-folder-open" aria-hidden="true"></span></span><a class="fw-semi-bold text-900 text-nowrap" href="{% url 'DOC_EXTRACTION:batch_detail' batch.batch_no %}">Batch #{{ batch.batch_no }}</a></div></td>
+          <td>{{ batch.count }}</td>
+          <td><div class="d-flex justify-content-between gap-3 fs-11 text-600 mb-1"><span>{{ batch.completed }} of {{ batch.count }}</span><span>{{ batch.progress }}%</span></div><div class="progress batch-progress" role="progressbar" aria-label="Completed documents in batch {{ batch.batch_no }}" aria-valuenow="{{ batch.progress }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-primary" style="width: {{ batch.progress }}%"></div></div></td>
+          <td class="text-nowrap">{{ batch.created_at|date:"j M Y, H:i T" }}</td><td class="text-nowrap">{{ batch.updated_at|date:"j M Y, H:i T" }}</td>
+          <td class="pe-4 text-end"><a class="btn btn-link btn-sm text-nowrap px-0" href="{% url 'DOC_EXTRACTION:batch_detail' batch.batch_no %}">Open <span class="fas fa-chevron-right ms-1 fs-11" aria-hidden="true"></span></a></td>
+        </tr>
+      {% empty %}<tr><td colspan="6" class="text-center text-600 py-5">No batches found.</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  {% include 'document_extraction/includes/pagination.html' %}
+</section>
+{% endblock %}

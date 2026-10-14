@@ -1,0 +1,51 @@
+{% extends 'document_extraction/base.html' %}
+{% load static extraction_markdown %}
+{% block breadcrumbs %}<nav aria-label="Breadcrumb"><ol class="breadcrumb fs-10 mb-3"><li class="breadcrumb-item"><a href="{% url 'DOC_EXTRACTION:document_list' %}">Documents</a></li><li class="breadcrumb-item active" aria-current="page">#{{ document.document_no }}</li></ol></nav>{% endblock %}
+{% block content %}
+<div class="page-heading d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+  <div><h1 class="fs-6 mb-1">Document #{{ document.document_no }}</h1><p class="text-600 mb-0 text-break">{{ document.file_name }}</p></div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-falcon-default" href="{% url 'DOC_EXTRACTION:document_edit' document.document_no %}">Edit document</a>
+    <a class="btn btn-falcon-default" href="{% url 'DOC_EXTRACTION:doc_extraction_create' document.document_no %}">Add text extraction</a>
+    {% if text_logs or runs %}<a class="btn btn-falcon-default" href="#extraction-results">Extraction results</a>{% endif %}
+    <a class="btn btn-outline-danger" href="{% url 'DOC_EXTRACTION:document_delete' document.document_no %}">Delete document</a>
+    <form class="rerun-form" method="post" action="{% url 'DOC_EXTRACTION:document_rerun' document.document_no %}">{% csrf_token %}<button class="btn btn-falcon-primary" type="submit" {% if document.processing_status == 'processing' or document.processing_status == 'queued' %}disabled{% endif %} title="Extract the saved original again using current settings. Previous results are kept."><span class="fas fa-redo me-2" aria-hidden="true"></span>Re-Run</button></form>
+  </div>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-lg-7">{% include 'document_extraction/includes/file_preview.html' %}</div>
+  <div class="col-lg-5">
+    <section class="card mb-3" aria-labelledby="information-heading">
+      <div class="card-header"><h2 class="fs-9 mb-0" id="information-heading">Document information</h2></div>
+      <div class="card-body"><dl class="row metadata mb-0">
+        <dt class="col-5">Processing</dt><dd class="col-7"><span class="badge rounded-pill badge-subtle-{{ document.processing_color }}">{{ document.processing_label }}</span></dd>
+        <dt class="col-5">Review</dt><dd class="col-7"><span class="badge rounded-pill badge-subtle-{{ document.review_color }}">{{ document.review_label }}</span></dd>
+        <dt class="col-5">Document type</dt><dd class="col-7">{{ document.document_type }}</dd>
+        <dt class="col-5">Batch</dt><dd class="col-7">{% if document.fk_batch_no_id %}<a href="{% url 'DOC_EXTRACTION:batch_detail' document.fk_batch_no_id %}">#{{ document.fk_batch_no_id }}</a>{% else %}Unassigned{% endif %}</dd>
+        <dt class="col-5">MIME type</dt><dd class="col-7">{{ document.mime_type|default:"—" }}</dd>
+        <dt class="col-5">Created</dt><dd class="col-7">{{ document.created_at|date:"j M Y, H:i T" }}</dd>
+        <dt class="col-5">Updated</dt><dd class="col-7">{{ document.updated_at|date:"j M Y, H:i T" }}</dd>
+        <dt class="col-5">Storage path</dt><dd class="col-7 mb-0"><code>{{ document.storage_path }}</code></dd>
+      </dl></div>
+    </section>
+    <section class="card" aria-labelledby="review-heading"><div class="card-header"><h2 class="fs-9 mb-0" id="review-heading">Review result</h2></div><div class="card-body">
+      <p class="fs-10 text-600">Check the extracted text against the original document before approving.</p>
+      <form method="post" action="{% url 'DOC_EXTRACTION:document_review' document.document_no %}">{% csrf_token %}
+        <div class="d-flex gap-2"><button class="btn btn-success flex-fill" name="review_status" value="approved" type="submit"><span class="fas fa-check me-1" aria-hidden="true"></span>Approve</button><button class="btn btn-outline-danger flex-fill" name="review_status" value="rejected" type="submit"><span class="fas fa-times me-1" aria-hidden="true"></span>Reject</button></div>
+        {% if document.review_status != 'pending' %}<button class="btn btn-link btn-sm mt-2 px-0" name="review_status" value="pending" type="submit">Reset review to pending</button>{% endif %}
+      </form>
+    </div></section>
+  </div>
+</div>
+<div id="extraction-results">
+{% if text_logs %}{% include 'document_extraction/includes/text_results.html' %}{% endif %}
+{% if runs %}
+<section class="card mb-4" aria-labelledby="llm-heading">
+  <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2"><h2 class="fs-9 mb-0" id="llm-heading">LLM extractions <span class="badge badge-subtle-secondary ms-2">{{ runs|length }}</span></h2><span class="fs-11 text-600">Open a result to compare or edit Markdown</span></div>
+  {% include 'document_extraction/includes/extraction_list.html' with logs=runs kind='LLM' route_name='DOC_EXTRACTION:llm_extraction_detail' %}
+  {% if runs|length == 1 and runs.0.markdown_text %}<div class="card-body border-top"><div class="extraction-markdown">{{ runs.0.markdown_text|extraction_markdown }}</div></div>{% endif %}
+</section>
+{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'document_extraction/vendors/jszip.min.js' %}"></script><script src="{% static 'document_extraction/document-review.js' %}?v=5" defer></script><script src="{% static 'document_extraction/rerun.js' %}" defer></script>{% endblock %}

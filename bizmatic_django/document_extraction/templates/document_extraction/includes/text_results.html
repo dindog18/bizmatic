@@ -1,0 +1,20 @@
+{% load extraction_markdown %}
+<section class="card mb-4" aria-labelledby="text-heading">
+  <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+    <h2 class="fs-9 mb-0" id="text-heading">Text extraction{% if text_logs|length == 1 %} result{% else %}s{% endif %}</h2>
+    {% if text_logs|length == 1 %}<a class="fs-10" href="{% url 'DOC_EXTRACTION:doc_extraction_detail' document.document_no text_logs.0.log_no %}">View extraction #{{ text_logs.0.log_no }}</a>{% endif %}
+  </div>
+  {% include 'document_extraction/includes/extraction_list.html' with logs=text_logs kind='Text' route_name='DOC_EXTRACTION:doc_extraction_detail' %}
+  {% if text_logs|length > 1 %}
+    <p class="fs-10 text-600 px-4 pt-3 mb-2">Open an attempt to review it, then mark the accurate result. The newest attempt may not be the most accurate.</p>
+  {% elif text_logs|length == 1 %}
+    <div class="card-body">
+      {% if text_logs.0.user_selected_accurate %}<span class="badge badge-subtle-success mb-3">Selected as accurate</span>{% endif %}
+      {% if text_logs.0.markdown_text %}
+        <div class="extraction-markdown">{{ text_logs.0.markdown_text|extraction_markdown }}</div>
+      {% else %}
+        <p class="text-600 fs-10 mb-0">No extracted text available yet. <a href="{% url 'DOC_EXTRACTION:doc_extraction_detail' document.document_no text_logs.0.log_no %}">View extraction details</a></p>
+      {% endif %}
+    </div>
+  {% else %}<div class="card-body"><p class="text-600 fs-10 mb-0">No text extractions yet.</p></div>{% endif %}
+</section>

@@ -1,0 +1,52 @@
+{% extends 'document_extraction/base.html' %}
+{% load static extraction_markdown %}
+{% block breadcrumbs %}
+<nav aria-label="Breadcrumb"><ol class="breadcrumb fs-10 mb-3"><li class="breadcrumb-item"><a href="{% url 'DOC_EXTRACTION:document_list' %}">Documents</a></li><li class="breadcrumb-item"><a href="{% url 'DOC_EXTRACTION:document_detail' document.document_no %}">#{{ document.document_no }}</a></li>{% if edit_mode %}<li class="breadcrumb-item"><a href="{% url log.detail_route document.document_no log.log_no %}">{{ kind }} #{{ log.log_no }}</a></li><li class="breadcrumb-item active">Edit Markdown</li>{% else %}<li class="breadcrumb-item active">{{ kind }} #{{ log.log_no }}</li>{% endif %}</ol></nav>
+{% endblock %}
+{% block content %}
+<div class="page-heading d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+  <div><h1 class="fs-6 mb-1">{% if edit_mode %}Edit Markdown{% else %}{{ kind }} extraction #{{ log.log_no }}{% endif %}</h1><p class="text-600 mb-0 text-break">{{ document.file_name }}</p></div>
+  <div class="d-flex flex-wrap gap-2">
+    <button id="compare-toggle" class="btn btn-falcon-default" type="button" aria-controls="source-panel" aria-expanded="{% if edit_mode %}true{% else %}false{% endif %}"><span class="fas fa-columns me-2" aria-hidden="true"></span><span>{% if edit_mode %}Hide original{% else %}Compare original{% endif %}</span></button>
+    {% if not edit_mode %}<a class="btn btn-falcon-primary" href="{% url log.edit_route document.document_no log.log_no %}"><span class="fas fa-edit me-2" aria-hidden="true"></span>Edit Markdown</a><a class="btn btn-outline-danger" href="{% url log.delete_route document.document_no log.log_no %}">Delete extraction</a>{% endif %}
+    <a class="btn btn-falcon-default" href="{% if edit_mode %}{% url log.detail_route document.document_no log.log_no %}{% else %}{% url 'DOC_EXTRACTION:document_detail' document.document_no %}{% endif %}">{% if edit_mode %}Back to result{% else %}Back to document{% endif %}</a>
+  </div>
+</div>
+{% if edit_mode %}<div class="alert alert-info fs-10 mb-3">Save Markdown to update this extraction. Changed content needs a new accuracy check and review.</div>{% for error in form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endfor %}{% for error in form.markdown_text.errors %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endfor %}{% endif %}
+{% if log.error_message %}<div class="alert alert-danger fs-10 mb-3"><strong>Processing error:</strong> {{ log.error_message }}</div>{% endif %}
+<div id="review-workspace" class="review-workspace {% if edit_mode %}is-comparing{% endif %}" data-download-name="{{ document.file_name }}">
+  <div id="source-panel" {% if not edit_mode %}hidden{% endif %}>{% include 'document_extraction/includes/file_preview.html' %}</div>
+  {% if edit_mode %}<form id="markdown-form" class="card markdown-panel" method="post" aria-labelledby="result-heading">{% csrf_token %}{{ form.revision }}{% else %}<section class="card markdown-panel" aria-labelledby="result-heading">{% endif %}
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2"><h2 class="fs-9 mb-0" id="result-heading">{% if edit_mode %}Markdown editor{% else %}Extracted result{% endif %}</h2><div class="d-flex gap-2">{% if is_llm %}<span class="badge badge-subtle-{{ log.color }}">{{ log.status_label }}</span>{% endif %}{% if log.user_selected_accurate %}<span class="badge badge-subtle-success">Selected as accurate</span>{% endif %}</div></div>
+    <div class="markdown-tabs border-bottom px-3 py-2 d-flex flex-wrap align-items-center gap-2" role="tablist" aria-label="Markdown display">
+      <button id="preview-tab" class="btn btn-sm {% if not edit_mode %}btn-primary{% else %}btn-falcon-default{% endif %}" type="button" role="tab" aria-selected="{{ edit_mode|yesno:'false,true' }}" aria-controls="markdown-preview">Rendered Markdown</button>
+      <button id="source-tab" class="btn btn-sm {% if edit_mode %}btn-primary{% else %}btn-falcon-default{% endif %}" type="button" role="tab" aria-selected="{{ edit_mode|yesno:'true,false' }}" aria-controls="markdown-source">{% if edit_mode %}Edit source{% else %}Raw Markdown{% endif %}</button>
+    </div>
+    <div id="markdown-preview" class="card-body extraction-markdown review-scroll" role="tabpanel" aria-labelledby="preview-tab" {% if edit_mode %}hidden{% endif %}>{% if log.markdown_text %}{{ log.markdown_text|extraction_markdown }}{% else %}<p class="text-600">No Markdown was returned for this attempt.</p>{% endif %}</div>
+    <div id="markdown-source" class="review-scroll" role="tabpanel" aria-labelledby="source-tab" {% if not edit_mode %}hidden{% endif %}>
+      {% if edit_mode %}<label class="visually-hidden" for="markdown-editor">Markdown source</label><textarea id="markdown-editor" name="markdown_text" class="markdown-editor" spellcheck="false" required>{{ form.markdown_text.value|default_if_none:'' }}</textarea>{% else %}<pre class="raw-text">{{ log.markdown_text|default_if_none:'' }}</pre>{% endif %}
+    </div>
+    <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <span id="draft-status" class="fs-11 text-600" role="status" aria-live="polite">{% if edit_mode %}Edit source, then save your changes{% else %}Saved extraction{% endif %}</span>
+      <div class="d-flex flex-wrap gap-2">{% if edit_mode %}<button id="reset-markdown" class="btn btn-falcon-default btn-sm" type="button">Reset to saved</button><button id="save-markdown" class="btn btn-primary btn-sm" type="submit">Save Markdown</button>{% elif log.markdown_text or log.user_selected_accurate %}{% include 'document_extraction/includes/accuracy_form.html' %}{% endif %}<button id="download-markdown" class="btn btn-falcon-default btn-sm" type="button"><span class="fas fa-download me-1" aria-hidden="true"></span>Download .md</button></div>
+    </div>
+  {% if edit_mode %}</form>{% else %}</section>{% endif %}
+</div>
+{{ log.markdown_text|default_if_none:""|json_script:"markdown-data" }}
+<details class="card mb-4">
+  <summary class="card-header fs-9 fw-semi-bold">Extraction details</summary>
+  <div class="card-body"><dl class="row metadata mb-0">
+    <dt class="col-sm-4">Document</dt><dd class="col-sm-8"><a href="{% url 'DOC_EXTRACTION:document_detail' document.document_no %}">#{{ log.fk_document_no_id }}</a></dd>
+    <dt class="col-sm-4">Created</dt><dd class="col-sm-8">{{ log.created_at|date:"j M Y, H:i T" }}</dd>
+    <dt class="col-sm-4">Updated</dt><dd class="col-sm-8">{{ log.updated_at|date:"j M Y, H:i T" }}</dd>
+    {% if is_llm %}
+    <dt class="col-sm-4">Provider / model</dt><dd class="col-sm-8">{{ log.provider|default:"—" }} / {{ log.model_name|default:"—" }}</dd>
+    <dt class="col-sm-4">Processing time</dt><dd class="col-sm-8">{% if log.processing_time_ms != None %}{{ log.processing_time_ms }} ms{% else %}—{% endif %}</dd>
+    <dt class="col-sm-4">Input / output tokens</dt><dd class="col-sm-8">{{ log.input_tokens|default_if_none:"—" }} / {{ log.output_tokens|default_if_none:"—" }}</dd>
+    {% endif %}
+    <dt class="col-sm-4">Selected as accurate</dt><dd class="col-sm-8 mb-0">{{ log.user_selected_accurate|yesno:"Yes,No" }}</dd>
+  </dl></div>
+</details>
+{% endblock %}
+
+{% block scripts %}<script src="{% static 'document_extraction/vendors/jszip.min.js' %}"></script><script src="{% static 'document_extraction/vendors/marked.js' %}"></script><script src="{% static 'document_extraction/document-review.js' %}?v=5" defer></script>{% endblock %}

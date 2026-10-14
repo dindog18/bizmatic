@@ -1,0 +1,4 @@
+<form method="post" action="{% url log.accuracy_route document.document_no log.log_no %}" class="d-inline-flex">
+  {% csrf_token %}<input type="hidden" name="accurate" value="{% if log.user_selected_accurate %}0{% else %}1{% endif %}">
+  <button class="btn btn-sm {% if log.user_selected_accurate %}btn-outline-success{% else %}btn-falcon-default{% endif %}" type="submit" aria-pressed="{{ log.user_selected_accurate|yesno:'true,false' }}" aria-label="{% if log.user_selected_accurate %}Clear accuracy for{% else %}Mark{% endif %} {{ kind }} extraction #{{ log.log_no }}{% if not log.user_selected_accurate %} accurate{% endif %}">{% if log.user_selected_accurate %}Clear accuracy{% else %}Mark accurate{% endif %}</button>
+</form>

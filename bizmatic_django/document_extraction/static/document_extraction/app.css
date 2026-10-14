@@ -1,0 +1,65 @@
+/* Small application additions to the supplied Falcon 3.25.0 theme. */
+.content { min-height: 100vh; display: flex; flex-direction: column; padding-bottom: 0; }
+.footer { position: static; margin-top: auto; }
+section.card { padding: 0; }
+#page-content { flex: 1; padding-top: 1.5rem; }
+.navbar-top { flex-shrink: 0; }
+.brand-icon { width: 2.2rem; height: 2.2rem; border-radius: .45rem; background: var(--falcon-primary); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+.mobile-brand { font-size: 1.35rem; }
+.summary-icon { width: 2.6rem; height: 2.6rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+.file-icon { width: 2.2rem; height: 2.6rem; border-radius: .35rem; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.document-table { min-width: 850px; font-size: .8125rem; }
+.document-table th { padding-top: .85rem; padding-bottom: .85rem; white-space: nowrap; }
+.document-table td { padding-top: 1rem; padding-bottom: 1rem; }
+.document-table td:first-child { min-width: 315px; }
+.badge { line-height: 1.25; }
+.upload-zone { background: var(--falcon-emphasis-bg); border: 2px dashed var(--falcon-border-color); border-radius: .375rem; }
+.metadata { font-size: .8125rem; }
+.metadata dt { color: var(--falcon-secondary-color); font-weight: 400; }
+.metadata dd { overflow-wrap: anywhere; }
+.document-canvas { background: var(--falcon-gray-200); min-height: 550px; padding: 1.5rem; display: flex; align-items: flex-start; justify-content: center; }
+.raw-text { margin: 0; padding: 1.25rem; font-size: .75rem; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--falcon-body-color); background: var(--falcon-gray-100); border-radius: .25rem; }
+.batch-progress { height: .35rem; min-width: 100px; }
+.skip-link { position: absolute; left: 1rem; top: -5rem; z-index: 1100; padding: .5rem 1rem; background: white; border: 2px solid var(--falcon-primary); }
+.skip-link:focus { top: .5rem; }
+.nav-link:focus-visible, a:focus-visible, button:focus-visible { outline: 2px solid var(--falcon-primary); outline-offset: 3px; }
+@media (min-width: 1200px) { .mobile-brand { display: none; } }
+@media (max-width: 575.98px) {
+  #page-content { padding-top: 1rem; }
+  .page-heading p { font-size: .8125rem; }
+  .document-canvas { min-height: 450px; padding: 1rem; }
+  .raw-text { padding: 1rem; }
+}
+/* Rendered extraction Markdown stays readable on small screens. */
+.extraction-markdown { font-size: .875rem; line-height: 1.8; overflow-x: auto; overflow-wrap: anywhere; }
+.extraction-markdown h1, .extraction-markdown h2 { font-size: 1.25rem; margin-bottom: 1rem; }
+.extraction-markdown h3, .extraction-markdown h4 { font-size: 1rem; }
+.extraction-markdown table { width: 100%; margin: 1rem 0; }
+.extraction-markdown th, .extraction-markdown td { padding: .6rem; border-bottom: 1px solid var(--falcon-border-color); }
+.extraction-markdown th { background: var(--falcon-gray-100); }
+.extraction-markdown > :last-child { margin-bottom: 0; }
+details.card > summary { cursor: pointer; }
+/* Independent scrolling keeps the original and extraction easy to compare. */
+[hidden] { display: none !important; }
+.review-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+.review-workspace > *, .markdown-panel { min-width: 0; }
+.original-preview { background: var(--falcon-gray-200); min-height: 450px; max-height: 65vh; overflow: auto; padding: 1rem; }
+.preview-empty { min-height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 2rem; overflow-wrap: anywhere; }
+.preview-empty p { max-width: 28rem; }
+.preview-image { display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; margin: auto; }
+.original-preview iframe { display: block; width: 100%; height: 60vh; border: 0; background: white; }
+.pdf-preview canvas { display: block; width: 100%; height: auto; background: white; }
+.office-paper { background: white; padding: 1.5rem; color: #344050; font-size: .875rem; overflow-wrap: anywhere; }
+.preview-table { font-size: .8125rem; }
+.preview-table td { min-width: 5rem; max-width: 24rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-scroll { min-height: 500px; max-height: 65vh; overflow: auto; }
+.markdown-editor { width: 100%; min-height: 500px; padding: 1.25rem; border: 0; resize: vertical; background: var(--falcon-gray-100); color: var(--falcon-body-color); font-family: monospace; font-size: .875rem; line-height: 1.8; }
+.markdown-editor:focus-visible { outline: 2px solid var(--falcon-primary); outline-offset: -2px; }
+.markdown-tabs button, .file-preview button, .markdown-panel .card-footer button, #compare-toggle { min-height: 44px; }
+@media (min-width: 992px) { .review-workspace.is-comparing { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 575.98px) {
+  .original-preview { min-height: 320px; padding: .75rem; }
+  .preview-empty { min-height: 280px; padding: 1rem; }
+  .review-scroll, .markdown-editor { min-height: 380px; }
+  .office-paper { padding: 1rem; }
+}

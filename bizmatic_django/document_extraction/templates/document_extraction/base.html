@@ -1,0 +1,57 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }} | Bizmatic</title>
+  <link rel="icon" href="{% static 'document_extraction/favicon.svg' %}" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'document_extraction/falcon/assets/css/theme.min.css' %}">
+  <link rel="stylesheet" href="{% static 'document_extraction/app.css' %}?v=document-review-2">
+</head>
+<body>
+  <a class="skip-link" href="#page-content">Skip to content</a>
+  <main class="main" id="top">
+    <div class="container" data-layout="container">
+      <nav class="navbar navbar-light navbar-vertical navbar-expand-xl" aria-label="Main navigation">
+        <div class="d-flex align-items-center">
+          <a class="navbar-brand" href="{% url 'DOC_EXTRACTION:document_list' %}">
+            <div class="d-flex align-items-center py-3"><span class="brand-icon me-2"><span class="fas fa-layer-group" aria-hidden="true"></span></span><span class="font-sans-serif text-primary">bizmatic</span></div>
+          </a>
+        </div>
+        <div class="collapse navbar-collapse" id="navbarVerticalCollapse">
+          <div class="navbar-vertical-content scrollbar">
+            <div class="navbar-vertical-label mt-3 mb-2 px-3">Document workspace</div>
+            <ul class="navbar-nav flex-column mb-3">
+              <li class="nav-item"><a class="nav-link {% if section == 'documents' %}active{% endif %}" {% if section == 'documents' %}aria-current="page"{% endif %} href="{% url 'DOC_EXTRACTION:document_list' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-file-alt" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Documents</span></div></a></li>
+              <li class="nav-item"><a class="nav-link {% if section == 'upload' %}active{% endif %}" {% if section == 'upload' %}aria-current="page"{% endif %} href="{% url 'DOC_EXTRACTION:document_upload' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-cloud-upload-alt" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Upload documents</span></div></a></li>
+              <li class="nav-item"><a class="nav-link {% if section == 'batches' %}active{% endif %}" {% if section == 'batches' %}aria-current="page"{% endif %} href="{% url 'DOC_EXTRACTION:batch_list' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-folder-open" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Batches</span></div></a></li>
+            </ul>
+          </div>
+        </div>
+      </nav>
+      <div class="content">
+        <nav class="navbar navbar-light navbar-glass navbar-top navbar-expand" aria-label="Workspace header">
+          <button class="btn navbar-toggler-humburger-icon navbar-toggler me-2" type="button" data-bs-toggle="collapse" data-bs-target="#navbarVerticalCollapse" aria-controls="navbarVerticalCollapse" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggle-icon"><span class="toggle-line"></span></span></button>
+          <a class="navbar-brand mobile-brand me-auto" href="{% url 'DOC_EXTRACTION:document_list' %}"><span class="font-sans-serif text-primary">bizmatic</span></a>
+          <span class="d-none d-xl-inline text-600 fs-10 me-auto">OCR &amp; document storage</span>
+        </nav>
+        <div id="page-content" tabindex="-1">
+          {% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %}" role="status">{{ message }}</div>{% endfor %}
+          {% if action_error %}<div class="alert alert-danger" role="alert">{{ action_error }}</div>{% endif %}
+          {% block breadcrumbs %}{% endblock %}
+          {% block content %}{% endblock %}
+        </div>
+        <footer class="footer"><div class="d-flex flex-wrap justify-content-between gap-2 py-3 fs-10 text-600"><span>Bizmatic <span class="mx-1">·</span> Document workspace</span><span>Documents, batches and extraction results</span></div></footer>
+      </div>
+    </div>
+  </main>
+  <script src="{% static 'document_extraction/falcon/vendors/popper/popper.min.js' %}"></script>
+  <script src="{% static 'document_extraction/falcon/vendors/bootstrap/bootstrap.min.js' %}"></script>
+  <script src="{% static 'document_extraction/falcon/vendors/fontawesome/all.min.js' %}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

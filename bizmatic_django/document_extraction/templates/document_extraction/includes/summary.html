@@ -1,0 +1,5 @@
+<div class="row g-3 mb-4">
+  {% for item in summary %}
+  <div class="col-6 col-xl"><div class="card h-100"><div class="card-body d-flex align-items-center justify-content-between gap-2"><div><h2 class="fs-10 fw-medium text-600 mb-2">{{ item.label }}</h2><div class="fs-5 fw-medium text-900 lh-1">{{ item.count }}</div></div><span class="summary-icon flex-shrink-0 bg-{{ item.color }}-subtle text-{{ item.color }}"><span class="fas fa-{{ item.icon }}" aria-hidden="true"></span></span></div></div></div>
+  {% endfor %}
+</div>

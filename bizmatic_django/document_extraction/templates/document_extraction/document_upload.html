@@ -1,0 +1,33 @@
+{% extends 'document_extraction/base.html' %}
+{% load static %}
+{% block breadcrumbs %}
+<nav aria-label="Breadcrumb"><ol class="breadcrumb fs-10 mb-3"><li class="breadcrumb-item"><a href="{% url 'DOC_EXTRACTION:document_list' %}">Documents</a></li><li class="breadcrumb-item active" aria-current="page">Upload</li></ol></nav>
+{% endblock %}
+{% block content %}
+<div class="page-heading mb-4">
+  <h1 class="fs-6 mb-1">Upload documents and images</h1>
+  <p class="text-600 mb-0">Choose one or multiple documents or images.</p>
+</div>
+<form id="document-upload-form" action="{% url 'DOC_EXTRACTION:document_upload' %}" method="post" enctype="multipart/form-data" class="card mb-4" aria-labelledby="files-heading">
+  {% csrf_token %}
+  <div class="card-header"><h2 class="fs-9 mb-0" id="files-heading">Add files</h2></div>
+  <div class="card-body">
+    <div id="upload-zone" class="upload-zone text-center px-3 py-5">
+      <img src="{% static 'document_extraction/falcon/assets/img/icons/cloud-upload.svg' %}" width="64" height="64" alt="" class="mb-3">
+      <h3 class="fs-8 mb-2">Drop your documents and images here</h3>
+      <p class="text-600 fs-10 mb-3">Choose files below or drop them into this area.</p>
+      <label for="document-files" class="visually-hidden">Select documents and images</label>
+      <input class="form-control" id="document-files" name="files" type="file" multiple required aria-describedby="upload-status">
+      <p class="fs-11 text-600 mb-0 mt-3">Each upload creates a batch and extracts its document content.</p>
+    </div>
+    <div class="d-flex flex-wrap justify-content-between gap-2 mt-3 fs-10 text-600"><span id="upload-status" role="status" aria-live="polite">No files selected</span><span>Multiple files supported</span></div>
+    <ul id="selected-files" class="list-group mt-3" aria-label="Selected files" hidden></ul>
+    <div id="upload-error" class="alert alert-danger mt-3 mb-0" role="alert" tabindex="-1" hidden></div>
+  </div>
+  <div class="card-footer border-top d-flex justify-content-end gap-2">
+    <a class="btn btn-falcon-default" href="{% url 'DOC_EXTRACTION:document_list' %}">Cancel</a>
+    <button id="upload-submit" class="btn btn-primary" type="submit"><span class="fas fa-cloud-upload-alt me-2" aria-hidden="true"></span><span id="upload-submit-label">Upload and extract</span></button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="{% static 'document_extraction/upload.js' %}" defer></script>{% endblock %}

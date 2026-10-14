@@ -1,0 +1,17 @@
+<section class="card file-preview h-100" data-file-name="{{ document.file_name }}" data-file-url="{% url 'DOC_EXTRACTION:document_original' document.document_no %}" aria-labelledby="original-heading">
+  <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+    <h2 class="fs-9 mb-0" id="original-heading">Original file</h2>
+    <div class="d-flex gap-1 preview-zoom" hidden>
+      <button class="btn btn-falcon-default btn-sm" type="button" data-zoom="out" aria-label="Zoom out"><span class="fas fa-search-minus" aria-hidden="true"></span></button>
+      <button class="btn btn-falcon-default btn-sm" type="button" data-zoom="fit">Fit</button>
+      <button class="btn btn-falcon-default btn-sm" type="button" data-zoom="in" aria-label="Zoom in"><span class="fas fa-search-plus" aria-hidden="true"></span></button>
+    </div>
+  </div>
+  <div class="original-preview" aria-live="polite">
+    <p class="p-3 text-600">Loading original file…</p>
+  </div>
+  <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2 fs-11">
+    <span class="preview-status text-600" role="status">{{ document.file_name }}</span>
+    <a class="preview-download btn btn-falcon-default btn-sm" href="{% url 'DOC_EXTRACTION:document_original' document.document_no %}?download=1"><span class="fas fa-download me-1" aria-hidden="true"></span>Download original</a>
+  </div>
+</section>

@@ -1,0 +1,22 @@
+{% extends 'document_extraction/base.html' %}
+{% load static %}
+{% block breadcrumbs %}<nav aria-label="Breadcrumb"><ol class="breadcrumb fs-10 mb-3"><li class="breadcrumb-item"><a href="{% url 'DOC_EXTRACTION:batch_list' %}">Batches</a></li><li class="breadcrumb-item active" aria-current="page">#{{ batch.batch_no }}</li></ol></nav>{% endblock %}
+{% block content %}
+<div class="page-heading d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+  <div><h1 class="fs-6 mb-1">Batch #{{ batch.batch_no }}</h1><p class="text-600 mb-0">{{ batch.count }} document{{ batch.count|pluralize }} in this batch</p></div>
+  <div class="d-flex flex-wrap gap-2"><a class="btn btn-falcon-default" href="{% url 'DOC_EXTRACTION:document_upload' %}"><span class="fas fa-plus me-2" aria-hidden="true"></span>Upload documents</a><form class="rerun-form" method="post" action="{% url 'DOC_EXTRACTION:batch_rerun' batch.batch_no %}">{% csrf_token %}<button class="btn btn-falcon-primary" type="submit" {% if rerun_disabled %}disabled{% endif %} title="Re-extract every document in this batch using current settings. Previous results are kept."><span class="fas fa-redo me-2" aria-hidden="true"></span>Re-Run batch</button></form></div>
+</div>
+{% include 'document_extraction/includes/summary.html' %}
+<section class="card mb-4" aria-labelledby="batch-information-heading">
+  <div class="card-header"><h2 class="fs-9 mb-0" id="batch-information-heading">Batch information</h2></div>
+  <div class="card-body"><div class="row g-3">
+    <div class="col-sm-6 col-xl-3"><div class="fs-10 text-600 mb-2">Batch number</div><div class="fw-semi-bold">#{{ batch.batch_no }}</div></div>
+    <div class="col-sm-6 col-xl-3"><div class="fs-10 text-600 mb-2">Created</div><div class="fs-10 fw-semi-bold">{{ batch.created_at|date:"j M Y, H:i T" }}</div></div>
+    <div class="col-sm-6 col-xl-3"><div class="fs-10 text-600 mb-2">Updated</div><div class="fs-10 fw-semi-bold">{{ batch.updated_at|date:"j M Y, H:i T" }}</div></div>
+    <div class="col-sm-6 col-xl-3"><div class="d-flex justify-content-between fs-10 text-600 mb-2"><span>Completed documents</span><span>{{ batch.progress }}%</span></div><div class="progress batch-progress" role="progressbar" aria-label="Completed documents" aria-valuenow="{{ batch.progress }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-primary" style="width: {{ batch.progress }}%"></div></div><div class="fs-11 text-600 mt-2">{{ batch.completed }} of {{ batch.count }} documents</div></div>
+  </div></div>
+</section>
+{% if batch.failed %}<div class="alert alert-warning fs-10 mb-4"><span class="fas fa-exclamation-triangle me-2" aria-hidden="true"></span>{{ batch.failed }} document{{ batch.failed|pluralize }} failed processing. Open its extraction history to inspect the error.</div>{% endif %}
+<section class="card mb-4" aria-labelledby="batch-documents-heading"><div class="card-header d-flex justify-content-between align-items-center"><h2 class="fs-9 mb-0" id="batch-documents-heading">Documents in this batch <span class="badge badge-subtle-secondary ms-2">{{ batch.count }}</span></h2><a class="fs-10" href="{% url 'DOC_EXTRACTION:document_list' %}">All documents</a></div>{% include 'document_extraction/includes/document_table.html' %}</section>
+{% endblock %}
+{% block scripts %}<script src="{% static 'document_extraction/rerun.js' %}" defer></script>{% endblock %}

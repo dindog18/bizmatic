@@ -1,0 +1,19 @@
+{% extends 'document_extraction/base.html' %}
+{% block content %}
+<div class="page-heading d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4"><div><h1 class="fs-6 mb-1">Documents</h1><p class="text-600 mb-0">Your uploaded files, extraction progress, and review queue.</p></div></div>
+{% include 'document_extraction/includes/summary.html' %}
+<section class="card mb-4" aria-labelledby="documents-heading">
+  <div class="card-header d-flex align-items-center justify-content-between"><h2 class="fs-9 mb-0" id="documents-heading">All documents <span class="badge badge-subtle-secondary ms-2">{{ page_obj.paginator.count }}</span></h2><span class="fs-10 text-600">Most recent first</span></div>
+  <form method="get" class="card-body border-top py-3" aria-label="Search and filter documents">
+    <div class="row g-2">
+      <div class="col-12"><label class="visually-hidden" for="document-search">Search documents</label><input class="form-control" type="search" id="document-search" name="q" value="{{ filters.q }}" placeholder="Search file name or document number"></div>
+      <div class="col-6 col-md-3"><label class="visually-hidden" for="type-filter">Document type</label><select class="form-select" id="type-filter" name="type"><option value="">All types</option>{% for type in document_types %}<option value="{{ type }}" {% if filters.type == type %}selected{% endif %}>{{ type }}</option>{% endfor %}</select></div>
+      <div class="col-6 col-md-3"><label class="visually-hidden" for="batch-filter">Batch</label><select class="form-select" id="batch-filter" name="batch"><option value="">All batches</option><option value="unassigned" {% if filters.batch == 'unassigned' %}selected{% endif %}>Unassigned</option>{% for batch in batches %}<option value="{{ batch.pk }}" {% if filters.batch == batch.pk|stringformat:"s" %}selected{% endif %}>#{{ batch.pk }}</option>{% endfor %}</select></div>
+      <div class="col-6 col-md-3"><label class="visually-hidden" for="status-filter">Processing status</label><select class="form-select" id="status-filter" name="status"><option value="">All statuses</option>{% for value, label in processing_choices %}<option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="col-6 col-md-3"><label class="visually-hidden" for="review-filter">Review status</label><select class="form-select" id="review-filter" name="review"><option value="">All reviews</option>{% for value, label in review_choices %}<option value="{{ value }}" {% if filters.review == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="col-12 d-flex align-items-center gap-3 mt-3"><button class="btn btn-primary" type="submit">Apply filters</button><a href="{% url 'DOC_EXTRACTION:document_list' %}">Reset</a></div>
+    </div>
+  </form>
+  {% include 'document_extraction/includes/document_table.html' %}
+</section>
+{% endblock %}
