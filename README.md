@@ -150,3 +150,11 @@ Python 3.14 with SQLite. See [CONTRIBUTING.md](CONTRIBUTING.md) for change guida
   secret, disable debug mode, and configure static-file serving for deployment.
 - No project license has been selected. Bundled Falcon and vendor assets have
   their own licensing terms; preserve their existing notices.
+
+## Database extraction
+
+The PostgreSQL metadata workspace opens directly at `/databases/` without a
+login or admin account. It supports connection verification, encrypted credentials, schema
+snapshots, metadata browsing, and local connection/history deletion. See the
+[database module setup and workflow](bizmatic_django/db_extraction/README.md)
+for key provisioning, permissions, dependencies, and deployment instructions.

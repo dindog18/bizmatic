@@ -1,0 +1,11 @@
+{% extends 'db_extraction/base.html' %}
+{% block content %}
+<div class="page-heading mb-4"><h1 class="fs-6 mb-1">{{ page_title }}</h1><p class="text-600 mb-0">Use a dedicated PostgreSQL metadata account. Every save verifies the connection.</p></div>
+<form method="post" class="card mb-4" data-busy="Testing connection… This may take a few seconds.">{% csrf_token %}
+<div class="card-header"><h2 class="fs-9 mb-0">Connection settings</h2></div><div class="card-body border-top">
+{% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+<div data-test-result class="alert" role="status" tabindex="-1" hidden></div>
+<div class="row g-3">{% for field in form %}<div class="{% if field.name == 'included_schemas' or field.name == 'ssl_root_cert' %}col-12{% else %}col-md-6{% endif %}">{% if field.field.widget.input_type == 'checkbox' %}<div class="form-check mt-2">{{ field }}<label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label></div>{% else %}<label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="text-danger" aria-hidden="true">*</span>{% endif %}</label>{{ field }}{% endif %}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{% for error in field.errors %}<div class="text-danger fs-10" role="alert">{{ error }}</div>{% endfor %}</div>{% endfor %}</div>
+<p class="text-600 fs-10 mt-4 mb-0">Only database structure is extracted. Source table records are never collected.</p><p data-busy-status class="text-primary mt-3 mb-0" role="status" hidden></p></div>
+<div class="card-footer border-top d-flex flex-wrap justify-content-end gap-2"><a class="btn btn-falcon-default" href="{% if source %}{% url 'DB_EXTRACTION:source_detail' source.pk %}{% else %}{% url 'DB_EXTRACTION:source_list' %}{% endif %}">Cancel</a><button class="btn btn-falcon-default" type="submit" name="intent" value="test">Test connection</button><button class="btn btn-primary" type="submit" name="intent" value="save">Test and save connection</button></div></form>
+{% endblock %}

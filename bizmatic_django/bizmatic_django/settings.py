@@ -76,6 +76,7 @@ INSTALLED_APPS = [
 
     # Main Project Application
     "document_extraction",
+    "db_extraction.apps.DbExtractionConfig",
 ]
 
 MIDDLEWARE = [
@@ -168,6 +169,11 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Keep the encryption key outside the repository and application database.
+# Provision it once as the service account using init_db_credential_key.
+# noinspection SpellCheckingInspection
+DB_EXTRACTION_CREDENTIAL_KEY_FILE = Path.home() / ".config" / "bizmatic" / "db-extraction.key"
 
 
 # Email

@@ -1,0 +1,7 @@
+{% extends 'document_extraction/base.html' %}
+{% load static %}
+{% block extra_styles %}<link rel="stylesheet" href="{% static 'db_extraction/workspace.css' %}">{% endblock %}
+{% block workspace_title %}PostgreSQL metadata workspace{% endblock %}
+{% block workspace_footer %}<span>Bizmatic · Database workspace</span><span>Schema metadata only</span>{% endblock %}
+{% block breadcrumbs %}<nav aria-label="Breadcrumb"><ol class="breadcrumb fs-10 mb-3"><li class="breadcrumb-item"><a href="{% url 'DB_EXTRACTION:source_list' %}">Databases</a></li>{% if source and page_title != source.name %}<li class="breadcrumb-item"><a href="{% url 'DB_EXTRACTION:source_detail' source.pk %}">{{ source.name }}</a></li>{% endif %}<li class="breadcrumb-item active" aria-current="page">{{ page_title }}</li></ol></nav>{% endblock %}
+{% block scripts %}<script src="{% static 'db_extraction/workspace.js' %}" defer></script>{% endblock %}

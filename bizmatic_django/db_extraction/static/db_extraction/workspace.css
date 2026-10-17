@@ -1,0 +1,5 @@
+/* Keep metadata readable; narrow screens scroll the table within its card. */
+#page-content .table-responsive .table { min-width: 740px; }
+#page-content .table-responsive th { white-space: nowrap; }
+#page-content .table-responsive td { vertical-align: top; }
+#page-content .table-responsive td:nth-child(2) { min-width: 150px; }
