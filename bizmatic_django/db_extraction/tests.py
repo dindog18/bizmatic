@@ -113,6 +113,14 @@ class LegacyCredentialMigrationTests(TransactionTestCase):
         before = [("db_extraction", "0001_initial")]
         after = [("db_extraction", "0002_extractionrun_extractor_version_and_more")]
         executor = MigrationExecutor(connection)
+        accounting_leaves = [
+            node for node in executor.loader.graph.leaf_nodes()
+            if node[0] in ("accounts_payable", "accounts_receivable")
+        ]
+        # These apps reference the database metadata tables. Remove their empty
+        # test schema before reconstructing the historical db_extraction state.
+        executor.migrate([("accounts_payable", None), ("accounts_receivable", None)])
+        self.addCleanup(lambda: MigrationExecutor(connection).migrate(accounting_leaves))
         # The security migration intentionally cannot be reversed into plaintext.
         # Remove only this test app's empty schema, then build its historical state.
         state = executor.loader.project_state(after)

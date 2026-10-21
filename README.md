@@ -73,6 +73,7 @@ The complete variable list is in [`.env.example`](bizmatic_django/.env.example).
 | `DOC_EXTRACTION_MAX_CONCURRENCY` | Positive concurrency limit, default `5` |
 | `DOC_EXTRACTION_LLM_TIMEOUT_SECONDS` | Positive HTTP timeout in seconds, default `120` |
 | `DOC_EXTRACTION_<PROVIDER>_*` | Model, API key, and optional endpoint settings |
+| `RECONCILIATION_PRICE_TOLERANCE` | Allowed monetary rounding difference per matched line, default `0.01` |
 
 Django commands, ASGI/WSGI startup, and extraction services share the same
 `python-dotenv` loader. Its file path is resolved from the project location,
@@ -158,3 +159,33 @@ login or admin account. It supports connection verification, encrypted credentia
 snapshots, metadata browsing, and local connection/history deletion. See the
 [database module setup and workflow](bizmatic_django/db_extraction/README.md)
 for key provisioning, permissions, dependencies, and deployment instructions.
+
+## Accounting reconciliation MVP
+
+Every AP and AR model inherits directly from Django's `models.Model`, with its
+fields declared in the app's `models.py`. Model comments explain each record's
+purpose. Each app's `services.py` contains plain functions for validation,
+matching, and settlement; `signals.py` refreshes cases when document membership
+changes. Standard `clean()`, `save()`, and `delete()` hooks call these functions.
+
+The AP and AR models provide a reconciliation backend. Create purchase orders,
+delivery receipts, and invoices with their line items. Add the documents to a
+`Transaction`, then link the lines through `DocumentMatch`. Matching checks party,
+currency, quantities, price, tax, and discounts. Receipt lines record actual
+received and accepted quantities. The same quantity cannot be matched twice.
+Cases automatically track pending, partial, matched, or exception status and
+their discrepancy amount when documents or matches change.
+
+Record payments and allocate cash, withholding tax, and discounts to invoices
+through `PaymentAllocation`. Cleared payments reduce the outstanding invoice
+balance; reversing a payment removes it from settlement. Payments can be
+recorded and cleared independently of matching. Allocations cannot exceed the
+payment's available amounts or the invoice total.
+
+`source_document` links to the uploaded file, and the selected extraction log
+identifies the text used to populate a record. Database provenance uses
+`source_database`, `source_table`, and `source_record_key`; these identify the
+external record and prevent duplicate imports. Database Extraction currently
+stores schema metadata only, so it does not import business rows.
+`RECONCILIATION_PRICE_TOLERANCE` defaults to `0.01` in the transaction currency.
+Quantity differences prevent a complete match.

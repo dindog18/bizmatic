@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+from decimal import Decimal
 from pathlib import Path
 
 from .environment import load_project_env
@@ -21,6 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load .env before reading database, Django, or other environment settings.
 # Explicit process variables still take precedence (for CI and deployment).
 load_project_env()
+RECONCILIATION_PRICE_TOLERANCE = Decimal(os.getenv("RECONCILIATION_PRICE_TOLERANCE", "0.01"))
 
 # Extraction progress and tracebacks appear in the terminal running Django.
 LOGGING = {
@@ -77,6 +79,8 @@ INSTALLED_APPS = [
     # Main Project Application
     "document_extraction",
     "db_extraction.apps.DbExtractionConfig",
+    "accounts_payable.apps.AccountsPayableConfig",
+    "accounts_receivable.apps.AccountsReceivableConfig",
 ]
 
 MIDDLEWARE = [
