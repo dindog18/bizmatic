@@ -1,0 +1,30 @@
+{% extends 'document_extraction/base.html' %}
+{% load static %}
+{% block extra_styles %}<link rel="stylesheet" href="{% static 'router/workspace.css' %}">{% endblock %}
+{% block workspace_title %}Document routing workspace{% endblock %}
+{% block workspace_footer %}<span>Bizmatic · Routing workspace</span><span>Frontend preview</span>{% endblock %}
+{% block breadcrumbs %}<nav aria-label="Breadcrumb"><ol class="breadcrumb fs-10 mb-3"><li class="breadcrumb-item"><a href="{% url 'ROUTER:queue' %}">Router</a></li><li class="breadcrumb-item active" aria-current="page">{{ page_title }}</li></ol></nav>{% endblock %}
+{% block content %}
+<div id="router-app">
+  <div class="router-demo mb-4"><div><strong>Routing preview</strong><span class="ms-2">Configuration changes stay in this browser.</span></div><button class="btn btn-link btn-sm p-0" type="button" data-action="reset">Reset preview</button></div>
+  <nav class="router-tabs mb-4" aria-label="Routing workspace">
+    <a href="{% url 'ROUTER:queue' %}" data-screen="queue">Routing queue</a>
+    <a href="{% url 'ROUTER:destinations' %}" data-screen="destinations">Destinations</a>
+    <a href="{% url 'ROUTER:rules' %}" data-screen="rules">Routing rules</a>
+    <a href="{% url 'ROUTER:logs' %}" data-screen="logs">LLM history</a>
+  </nav>
+  <div id="router-notice" class="alert alert-info" role="status" aria-live="polite" hidden></div>
+  <div id="router-root"><div class="card p-4"><h1 class="fs-7">Loading routing preview…</h1></div></div>
+  <noscript><div class="alert alert-warning">Enable JavaScript to explore the routing preview.</div></noscript>
+  <dialog class="router-dialog" id="router-dialog" aria-labelledby="router-dialog-title"></dialog>
+</div>
+{{ router_config|json_script:"router-config" }}
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'router/demo-data.js' %}" defer></script>
+<script src="{% static 'router/state.js' %}" defer></script>
+<script src="{% static 'router/requests.js' %}" defer></script>
+<script src="{% static 'router/configuration.js' %}" defer></script>
+<script src="{% static 'router/review.js' %}" defer></script>
+<script src="{% static 'router/workspace.js' %}" defer></script>
+{% endblock %}

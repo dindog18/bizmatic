@@ -1,0 +1,4 @@
+<div id="document-routing" data-queue-url="{% url 'ROUTER:queue' %}">
+  {{ routing_documents|json_script:"document-routing-data" }}
+  <dialog id="document-routing-dialog" class="document-routing-dialog" aria-labelledby="document-routing-title"></dialog>
+</div>

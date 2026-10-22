@@ -1,6 +1,7 @@
 {% extends 'document_extraction/base.html' %}
+{% load static %}
 {% block content %}
-<div class="page-heading d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4"><div><h1 class="fs-6 mb-1">Documents</h1><p class="text-600 mb-0">Your uploaded files, extraction progress, and review queue.</p></div></div>
+<div class="page-heading d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4"><div><h1 class="fs-6 mb-1">Documents</h1><p class="text-600 mb-0">Your uploaded files, extraction progress, and review queue.</p></div><button class="btn btn-primary" type="button" data-routing-trigger="selected" disabled>Route selected</button></div>
 {% include 'document_extraction/includes/summary.html' %}
 <section class="card mb-4" aria-labelledby="documents-heading">
   <div class="card-header d-flex align-items-center justify-content-between"><h2 class="fs-9 mb-0" id="documents-heading">All documents <span class="badge badge-subtle-secondary ms-2">{{ page_obj.paginator.count }}</span></h2><span class="fs-10 text-600">Most recent first</span></div>
@@ -16,4 +17,6 @@
   </form>
   {% include 'document_extraction/includes/document_table.html' %}
 </section>
+{% include 'document_extraction/includes/routing_dialog.html' %}
 {% endblock %}
+{% block scripts %}<script src="{% static 'document_extraction/routing.js' %}" defer></script>{% endblock %}

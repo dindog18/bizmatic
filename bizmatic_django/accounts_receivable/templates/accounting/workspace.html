@@ -1,6 +1,6 @@
 {% extends 'document_extraction/base.html' %}
 {% load static %}
-{% block extra_styles %}<link rel="stylesheet" href="{% static 'accounting/workspace.css' %}?v=configuration-5"><link rel="stylesheet" href="{% static 'accounting/configuration.css' %}?v=configuration-5">{% endblock %}
+{% block extra_styles %}<link rel="stylesheet" href="{% static 'accounting/workspace.css' %}?v=llm-activity-2"><link rel="stylesheet" href="{% static 'accounting/configuration.css' %}?v=llm-activity-2"><link rel="stylesheet" href="{% static 'accounting/llm-logs.css' %}?v=llm-activity-2">{% endblock %}
 {% block workspace_title %}Finance &amp; reconciliation workspace{% endblock %}
 {% block content %}
 <div class="finance-workspace" data-mode="{{ finance_config.mode }}">
@@ -17,4 +17,4 @@
 {{ finance_config|json_script:'finance-config' }}
 {% endblock %}
 {% block workspace_footer %}<span>Bizmatic · {{ workspace_name }}</span><span>Orders → Deliveries → Invoices → Payments</span>{% endblock %}
-{% block scripts %}<script src="{% static 'accounting/demo-data.js' %}?v=extraction-only-2" defer></script><script src="{% static 'accounting/workspace.js' %}?v=configuration-5" defer></script><script src="{% static 'accounting/configuration-schema.js' %}?v=configuration-5" defer></script><script src="{% static 'accounting/configuration.js' %}?v=configuration-5" defer></script>{% endblock %}
+{% block scripts %}{% if finance_resource == 'llm-logs' %}<script src="{% static 'document_extraction/vendors/marked.js' %}" defer></script>{% endif %}<script src="{% static 'accounting/demo-data.js' %}?v=extraction-only-2" defer></script><script src="{% static 'accounting/llm-logs.js' %}?v=llm-activity-2" defer></script><script src="{% static 'accounting/workspace.js' %}?v=llm-activity-2" defer></script><script src="{% static 'accounting/configuration-schema.js' %}?v=llm-activity-2" defer></script><script src="{% static 'accounting/configuration.js' %}?v=llm-activity-2" defer></script>{% endblock %}

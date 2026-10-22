@@ -36,6 +36,10 @@
               <li class="nav-item"><a class="nav-link {% if section == 'upload' %}active{% endif %}" {% if section == 'upload' %}aria-current="page"{% endif %} href="{% url 'DOC_EXTRACTION:document_upload' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-cloud-upload-alt" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Upload documents</span></div></a></li>
               <li class="nav-item"><a class="nav-link {% if section == 'batches' %}active{% endif %}" {% if section == 'batches' %}aria-current="page"{% endif %} href="{% url 'DOC_EXTRACTION:batch_list' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-folder-open" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Batches</span></div></a></li>
             </ul>
+            <div class="navbar-vertical-label mt-3 mb-2 px-3">Routing workspace</div>
+            <ul class="navbar-nav flex-column mb-3">
+              <li class="nav-item"><a class="nav-link {% if section == 'router' %}active{% endif %}" {% if section == 'router' %}aria-current="page"{% endif %} href="{% url 'ROUTER:queue' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-random" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Document routing</span></div></a></li>
+            </ul>
             <div class="navbar-vertical-label mt-3 mb-2 px-3">Database workspace</div>
             <ul class="navbar-nav flex-column mb-3">
               <li class="nav-item"><a class="nav-link {% if section == 'databases' %}active{% endif %}" {% if section == 'databases' %}aria-current="page"{% endif %} href="{% url 'DB_EXTRACTION:source_list' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-database" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Database connections</span></div></a></li>

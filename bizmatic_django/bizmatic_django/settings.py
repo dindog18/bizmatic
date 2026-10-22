@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     "db_extraction.apps.DbExtractionConfig",
     "accounts_payable.apps.AccountsPayableConfig",
     "accounts_receivable.apps.AccountsReceivableConfig",
+    "router.apps.RouterConfig",
 ]
 
 MIDDLEWARE = [

@@ -1,4 +1,7 @@
 /* Small application additions to the supplied Falcon 3.25.0 theme. */
+.document-routing-dialog { border:0; border-radius:.4rem; padding:0; width:min(94vw,40rem); color:var(--falcon-body-color); box-shadow:0 1rem 4rem #0003; }
+.document-routing-dialog::backdrop { background:#0b172766; }
+.document-routing-list { max-height:40vh; overflow:auto; font-size:.8125rem; }
 .content { min-height: 100vh; display: flex; flex-direction: column; padding-bottom: 0; }
 .footer { position: static; margin-top: auto; }
 section.card { padding: 0; }

@@ -5,6 +5,7 @@
 <div class="page-heading d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
   <div><h1 class="fs-6 mb-1">Document #{{ document.document_no }}</h1><p class="text-600 mb-0 text-break">{{ document.file_name }}</p></div>
   <div class="d-flex flex-wrap gap-2">
+    <button class="btn btn-primary" type="button" data-routing-trigger="document" data-document-id="{{ document.document_no }}">Route document</button>
     <a class="btn btn-falcon-default" href="{% url 'DOC_EXTRACTION:document_edit' document.document_no %}">Edit document</a>
     <a class="btn btn-falcon-default" href="{% url 'DOC_EXTRACTION:doc_extraction_create' document.document_no %}">Add text extraction</a>
     {% if text_logs or runs %}<a class="btn btn-falcon-default" href="#extraction-results">Extraction results</a>{% endif %}
@@ -47,5 +48,6 @@
 </section>
 {% endif %}
 </div>
+{% include 'document_extraction/includes/routing_dialog.html' %}
 {% endblock %}
-{% block scripts %}<script src="{% static 'document_extraction/vendors/jszip.min.js' %}"></script><script src="{% static 'document_extraction/document-review.js' %}?v=5" defer></script><script src="{% static 'document_extraction/rerun.js' %}" defer></script>{% endblock %}
+{% block scripts %}<script src="{% static 'document_extraction/vendors/jszip.min.js' %}"></script><script src="{% static 'document_extraction/document-review.js' %}?v=5" defer></script><script src="{% static 'document_extraction/rerun.js' %}" defer></script><script src="{% static 'document_extraction/routing.js' %}" defer></script>{% endblock %}

@@ -84,6 +84,12 @@ def _number(value):
     return int(value) if value.isascii() and value.isdecimal() and len(value) <= 19 and int(value) <= 2**63 - 1 else None
 
 
+def _routing_document(document):
+    """Presentation metadata for the browser-only routing confirmation."""
+    return {"id": document.pk, "name": document.file_name,
+            "review_status": document.review_status}
+
+
 def document_list_context(params) -> dict[str, Any]:
     filters = {key: params.get(key, "").strip() for key in ("q", "type", "batch", "status", "review")}
     documents = Document.objects.order_by("-created_at", "-pk")
@@ -105,6 +111,7 @@ def document_list_context(params) -> dict[str, Any]:
     return {
         "page_title": "Documents", "section": "documents", **page,
         "documents": [_document(doc) for doc in page["page_obj"]],
+        "routing_documents": [_routing_document(doc) for doc in page["page_obj"]],
         "summary": _summary(documents), "filters": filters,
         "batches": Batch.objects.order_by("-created_at", "-pk"),
         "document_types": Document.objects.order_by("document_type").values_list("document_type", flat=True).distinct(),
@@ -117,6 +124,7 @@ def document_detail_context(document_no: int) -> dict[str, Any]:
     return {
         "page_title": f"Document #{document_no}", "section": "documents",
         "document": _document(document),
+        "routing_documents": [_routing_document(document)],
         "text_logs": [_log(log) for log in DocExtractionLog.objects.filter(fk_document_no=document).order_by("-created_at", "-pk")],
         "runs": [_log(log) for log in LLMExtractionLog.objects.filter(fk_document_no=document).order_by("-created_at", "-pk")],
     }
@@ -149,6 +157,7 @@ def batch_detail_context(params, batch_no: int) -> dict[str, Any]:
     return {
         "page_title": f"Batch #{batch_no}", "section": "batches", **page,
         "batch": _batch(batch), "documents": [_document(doc) for doc in page["page_obj"]],
+        "routing_documents": [_routing_document(doc) for doc in documents],
         "rerun_disabled": not documents.exists() or documents.filter(processing_status__in=[ProcessingStatus.QUEUED, ProcessingStatus.PROCESSING]).exists(),
         "summary": _summary(documents),
     }

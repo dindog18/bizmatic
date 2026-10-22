@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const config = JSON.parse(document.getElementById('finance-config').textContent);
-  if (config.resource === 'configuration') return;
+  if (['configuration', 'llm-logs'].includes(config.resource)) return;
   const root = document.getElementById('finance-root');
   const ar = config.mode === 'ar';
   const resource = config.resource;
@@ -200,7 +200,7 @@
     if (record.source==='database') body=meta([['Connection','Demo ERP · PostgreSQL'],['Source table',`<code>${esc(record.sourceName)}</code>`],['Source record key',`<code>${esc(record.sourceKey)}</code>`],['Imported at',esc(record.importedAt || 'Not imported')]],true)+`<div class="mt-3">${button(config.sources.databases,'Browse database sources',false,'database')}</div>`;
     else if(record.source==='document') body=meta([['Source document',esc(file)],['Text extraction',esc(record.textLog || 'No extraction selected')],['LLM extraction',esc(record.llmLog || 'No extraction selected')],['Imported at',esc(record.importedAt || 'Not imported')]],true)+`<div class="mt-3">${button(documentURL,'Find source document',false,'file-alt')}</div>`;
     else body='<p class="text-600 mb-0">Source unavailable. Review the extraction workspace.</p>';
-    return card('Source & provenance',`<div class="finance-card-body">${sourceBadge(record.source)}<div class="mt-3">${body}</div><p class="fs-11 text-600 mt-3 mb-0">Sample reference only. Extraction links open the existing workspace; demo records do not create files, logs, connections, or imports.</p></div>`);
+    return card('Source & provenance',`<div class="finance-card-body">${sourceBadge(record.source)}<div class="mt-3">${body}</div><div class="mt-3">${button(config.routes['llm-logs']+'?target='+({"purchase-orders":"purchase_order","delivery-receipts":"delivery_receipt",invoices:"sales_invoice",payments:"payment"}[resource])+'&record='+record.id,'View LLM attempts',false,'history')}</div><p class="fs-11 text-600 mt-3 mb-0">Sample reference only. Extraction links open the existing workspace; demo records do not create files, logs, connections, or imports.</p></div>`);
   }
   function relatedCases(record) {
     const key=resource==='purchase-orders'?'orderIds':resource==='delivery-receipts'?'receiptIds':'invoiceIds';
@@ -239,6 +239,7 @@
     root.insertAdjacentHTML('beforeend',`<div class="finance-grid"><div>${main}</div><aside>${provenance(record)}${!isPayment?relatedCases(record):''}${evidence}</aside></div>`);
   }
   function partyDetail(record) {
+    root.insertAdjacentHTML('beforeend', `<div class="finance-actions mb-3">${button(config.routes['llm-logs']+'?target='+(ar?'customer':'supplier')+'&record='+record.id,'View LLM attempts',false,'history')}</div>`);
     const invoices=data.invoices.filter(row=>row.partyId===record.id);
     root.insertAdjacentHTML('beforeend',`<div class="finance-grid"><div>${card('Account information',`<div class="finance-card-body">${meta([['Status',badge(record.status)],['Contact person',esc(record.contact)],['Email',esc(record.email)],['Phone',esc(record.phone)],['Tax identification no.',esc(record.taxId)],['Payment terms',`Net ${record.terms} days`],['Billing address',esc(record.address)],...(ar?[['Shipping address',esc(record.shippingAddress)],['Credit limit',`PHP ${money(record.creditLimit)}`]]:[])])}</div>`)}${card('Invoices',invoiceTable(invoices),a(url('invoices')+'?party='+record.id,'View all invoices'))}${card('Context & notes',`<div class="finance-card-body text-600">${esc(record.notes || 'No context added.')}</div>`)}</div><aside>${card('Account balance',`<div class="finance-card-body"><div class="fs-6 fw-semibold mb-2">PHP ${money(total(invoices.filter(posted),balance))}</div><p class="text-600">Outstanding across posted or disputed invoices.</p>${button(url('invoices')+'?party='+record.id,'View invoices',true)}</div>`)}${card('Related records',`<div class="finance-card-body d-flex flex-column gap-3">${['purchase-orders','delivery-receipts','payments','reconciliation'].map(key=>a(url(key)+'?party='+record.id,`${titles[key]} <span class="float-end">${data[key].filter(row=>row.partyId===record.id).length} ${icon('arrow-right')}</span>`)).join('')}</div>`)}</aside></div>`);
   }

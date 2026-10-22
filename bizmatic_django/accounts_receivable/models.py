@@ -11,6 +11,8 @@ from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models, transaction
 from django.db.models import Q
 
+from document_extraction.models import LLMRunStatus
+
 from . import services
 
 
@@ -1194,3 +1196,87 @@ class ExtractionConfiguration(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.get_target_entity_display()} · {self.get_source_type_display()})"
+
+
+class LLMExtractionLog(models.Model):
+    """One accounting LLM attempt, including its original input and output.
+
+    Existing source_llm_log fields still identify document-extraction evidence.
+    This history covers accounting extraction and configuration assistance.
+    Recording attempts and calling providers require a future backend; the UI
+    currently stores explicitly simulated attempts in this browser tab only.
+    """
+
+    class Purpose(models.TextChoices):
+        EXTRACTION = "extraction", "Record extraction"
+        CONFIGURATION = "configuration", "Configuration assistance"
+
+    llm_log_no = models.AutoField(primary_key=True)
+    configuration = models.ForeignKey(
+        "ExtractionConfiguration", on_delete=models.PROTECT, null=True,
+        blank=True, related_name="llm_logs",
+    )
+    configuration_revision = models.PositiveIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1)],
+    )
+    target_entity = models.CharField(max_length=30, choices=ExtractionConfiguration.TargetEntity.choices)
+    source_type = models.CharField(max_length=20, choices=ExtractionConfiguration.SourceType.choices)
+    purpose = models.CharField(max_length=20, choices=Purpose.choices, default=Purpose.EXTRACTION)
+    # Optional destination links allow attempts before a record exists.
+    customer = models.ForeignKey(
+        "Customer", on_delete=models.PROTECT, null=True, blank=True, related_name="llm_logs",
+    )
+    purchase_order = models.ForeignKey(
+        "CustomerPurchaseOrder", on_delete=models.PROTECT, null=True, blank=True, related_name="llm_logs",
+    )
+    delivery_receipt = models.ForeignKey(
+        "CompanyDeliveryReceipt", on_delete=models.PROTECT, null=True, blank=True, related_name="llm_logs",
+    )
+    sales_invoice = models.ForeignKey(
+        "CompanySalesInvoice", on_delete=models.PROTECT, null=True, blank=True, related_name="llm_logs",
+    )
+    payment = models.ForeignKey(
+        "CustomerPayment", on_delete=models.PROTECT, null=True, blank=True, related_name="llm_logs",
+    )
+    fk_document_no = models.ForeignKey(
+        "document_extraction.Document", on_delete=models.PROTECT, null=True,
+        blank=True, related_name="ar_llm_logs",
+    )
+    source_llm_log = models.ForeignKey(
+        "document_extraction.LLMExtractionLog", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="ar_accounting_logs",
+    )
+    provider = models.CharField(max_length=100, null=True, blank=True)
+    model_name = models.CharField(max_length=150, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=LLMRunStatus.choices, default=LLMRunStatus.QUEUED)
+    # Snapshots preserve the context used by this attempt, even if the draft changes.
+    configuration_snapshot = models.JSONField(default=dict, blank=True)
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_payload = models.JSONField(default=dict, blank=True)
+    markdown_text = models.TextField(null=True, blank=True)
+    input_tokens = models.PositiveIntegerField(null=True, blank=True)
+    output_tokens = models.PositiveIntegerField(null=True, blank=True)
+    processing_time_ms = models.PositiveIntegerField(null=True, blank=True)
+    error_message = models.TextField(null=True, blank=True)
+    is_simulated = models.BooleanField(default=False)
+    # Accuracy review is independent of applying changes or submitting a profile.
+    user_selected_accurate = models.BooleanField(default=False)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="ar_reviewed_llm_logs",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-llm_log_no"]
+        indexes = [
+            models.Index(fields=["status", "-created_at"], name="ar_llm_status_created"),
+            models.Index(fields=["configuration", "-created_at"], name="ar_llm_config_created"),
+        ]
+        verbose_name = "AR LLM extraction log"
+
+    def __str__(self):
+        return f"AR LLM #{self.llm_log_no} · {self.get_status_display()}"

@@ -6,6 +6,7 @@
   const root = document.getElementById('finance-root');
   const catalog = config.configurationCatalog;
   const schema = window.BizmaticConfigurationSchema;
+  const activity = window.BizmaticLLMLogs;
   const storageKey = `bizmatic-configuration-v1-${config.mode}`;
   const baseURL = config.routes.configuration;
   const parameters = new URLSearchParams(location.search);
@@ -161,12 +162,16 @@
     const messages=draft.assistant_messages;
     const proposal=draft.assistant_proposal;
     const proposalMarkup=proposal?`<section class="config-proposal" aria-label="Assistant proposed changes"><div class="config-proposal-head"><strong>Proposed changes</strong><div class="config-note mt-1">Choose what to apply. Replacements of existing input start unchecked.</div></div><div class="config-proposal-changes">${proposal.changes.map((change,index)=>`<div class="config-proposal-row"><input class="form-check-input" type="checkbox" id="proposal-${index}" data-proposal-index="${index}" ${change.selected?'checked':''}><label for="proposal-${index}"><strong>${esc(change.label)}</strong>${change.before?`<span class="proposal-before">Current: ${esc(change.before)}</span>`:'<span class="text-600 d-block mt-1">Currently empty</span>'}<span class="proposal-after">Proposed: ${esc(change.after)}</span></label></div>`).join('')}</div><div class="config-proposal-footer"><button class="btn btn-primary btn-sm" type="button" data-apply-proposal>Apply selected to draft</button><button class="btn btn-link btn-sm" type="button" data-dismiss-proposal>Dismiss</button></div></section>`:'';
-    return `<aside class="config-assistant"><section class="card"><div class="finance-card-head"><div><h2>${icon('magic')} Configuration assistant</h2><div class="finance-card-subtitle">Chat → proposed output → your review</div></div><span class="badge badge-subtle-secondary">Preview</span></div><div class="config-context">Uses your current ${esc(targetFor(draft).label.toLowerCase())} draft: ${mapped} mapped fields, ${draft.extraction_context.length} context characters, business notes, example text, rules, and conversation history.<br><strong>Local demo suggestions · No LLM is connected.</strong></div><div class="config-chat-log" id="config-chat-log" role="log" aria-live="polite">${messages.length?messages.map(message=>`<div class="config-chat-message ${message.role==='user'?'user':''}"><small>${message.role==='user'?'You':'Assistant preview'}</small>${esc(message.content)}</div>`).join(''):'<div class="config-chat-message"><small>Assistant preview</small>Describe how your data is organized. I can propose mappings, extraction instructions, dates, and currency rules. I will preserve your existing inputs and show changes for you to accept.</div>'}</div><div class="config-chat-prompts">${(draft.source_type==='database'?['Suggest unmapped fields','Use PHP and DD/MM/YYYY','Explain review gaps']:['Draft extraction context','Use PHP and DD/MM/YYYY','Explain review gaps']).map(prompt=>`<button class="btn btn-falcon-default btn-sm" type="button" data-chat-prompt="${prompt}">${prompt}</button>`).join('')}</div>${proposalMarkup}<form id="config-chat-form" class="config-chat-controls"><label class="visually-hidden" for="config-chat-input">Message the configuration assistant</label><textarea id="config-chat-input" class="form-control mb-2" rows="3" maxlength="4000" placeholder="e.g. Map invoice_reference_no to invoice_no. Keep my current notes.">${esc(chatInput)}</textarea><div class="config-feedback" role="status">${esc(chatFeedback)}</div><button class="btn btn-primary w-100" type="submit">${icon('paper-plane')} Send message</button><p class="config-note mb-0">Suggestions never submit, activate, or import anything. Final submission is a separate user action.</p></form></section></aside>`;
+    return `<aside class="config-assistant"><section class="card"><div class="finance-card-head"><div><h2>${icon('magic')} Configuration assistant</h2><div class="finance-card-subtitle">Chat → proposed output → your review</div></div><span class="badge badge-subtle-secondary">Preview</span></div><div class="config-context">Uses your current ${esc(targetFor(draft).label.toLowerCase())} draft: ${mapped} mapped fields, ${draft.extraction_context.length} context characters, business notes, example text, rules, and conversation history.<br><strong>Local demo suggestions · No LLM is connected.</strong></div><div class="config-chat-log" id="config-chat-log" role="log" aria-live="polite">${messages.length?messages.map(message=>`<div class="config-chat-message ${message.role==='user'?'user':''}"><small>${message.role==='user'?'You':'Assistant preview'}</small>${esc(message.content)}${message.llm_log_no?`<a class="d-block mt-2" href="${activity.detailURL(message.llm_log_no)}">View attempt #${message.llm_log_no}</a>`:''}</div>`).join(''):'<div class="config-chat-message"><small>Assistant preview</small>Describe how your data is organized. I can propose mappings, extraction instructions, dates, and currency rules. I will preserve your existing inputs and show changes for you to accept.</div>'}</div><a class="llm-history-link" href="${draft.id===null?config.routes['llm-logs']:activity.configurationURL(draft.id)}">View ${draft.id===null?'all LLM activity':'this configuration’s attempt history'}</a><div class="config-chat-prompts">${(draft.source_type==='database'?['Suggest unmapped fields','Use PHP and DD/MM/YYYY','Explain review gaps']:['Draft extraction context','Use PHP and DD/MM/YYYY','Explain review gaps']).map(prompt=>`<button class="btn btn-falcon-default btn-sm" type="button" data-chat-prompt="${prompt}">${prompt}</button>`).join('')}</div>${proposalMarkup}<form id="config-chat-form" class="config-chat-controls"><label class="visually-hidden" for="config-chat-input">Message the configuration assistant</label><textarea id="config-chat-input" class="form-control mb-2" rows="3" maxlength="4000" placeholder="e.g. Map invoice_reference_no to invoice_no. Keep my current notes.">${esc(chatInput)}</textarea><div class="config-feedback" role="status">${esc(chatFeedback)}</div><button class="btn btn-primary w-100" type="submit">${icon('paper-plane')} Send message</button><p class="config-note mb-0">Suggestions never submit, activate, or import anything. Final submission is a separate user action.</p></form></section></aside>`;
   }
   function renderAssistant() {
     const old=root.querySelector('.config-assistant');if(old)old.outerHTML=assistant();bindAssistant();
   }
   function propose(message) {
+    assignId(draft); rememberURL();
+    const started = performance.now();
+    const original = structuredClone(payload().configuration);
+    const request = {message, conversation:structuredClone(draft.assistant_messages)};
     const target=targetFor(draft);const changes=[];let unmatched=[];
     const add=(path,title,value)=>{const before=get(draft,path);if(!same(before,value)&&!changes.some(change=>change.path===path))changes.push({path,label:title,before:structuredClone(before),after:value,selected:before==='' || before===null});};
     const currency=message.match(/(?:currency|use|in|set(?:\s+to)?)\s+([A-Z]{3})\b/i);
@@ -207,8 +212,9 @@
     const kept=Object.values(draft.field_mappings).filter(value=>value.source).length;
     let response=explain?issues.length?`Your draft has ${issues.length} review item(s):\n${issues.map(issue=>'• '+issue.message).join('\n')}\nI have not changed your inputs.`:'Your configuration fields are complete. Review the output yourself before submitting the preview. No live schema or extraction check has run.':changes.length?`I considered your current business notes, ${kept} existing mappings, extraction instructions, example text, rules, and conversation. I prepared ${changes.length} proposed change(s). Existing values are kept unless you explicitly select a replacement. Review and apply the changes below; this does not submit the configuration.`:'I kept your current inputs. No supported change was found. For database mappings, provide column names and try “Suggest unmapped fields” or “Map invoice_reference_no to invoice_no”. For document instructions, describe what should be read. This is a local preview, not a live LLM.';
     if(unmatched.length)response+=`\nThese requested columns are not in your provided schema: ${unmatched.join(', ')}. Add them to the schema if correct, then ask again.`;
-    const proposal=changes.length?{baseContext:fingerprint(),changes,created_at:new Date().toISOString()}:null;
-    draft.assistant_messages.push({role:'user',content:message},{role:'assistant',content:response});
+    const run=activity.append({configuration:draft.id,configuration_revision:draft.revision,target_entity:draft.target_entity,source_type:draft.source_type,purpose:'configuration',provider:null,model_name:null,status:'completed',configuration_snapshot:original,request_payload:request,response_payload:{message:response,changes:structuredClone(changes)},markdown_text:response,input_tokens:null,output_tokens:null,processing_time_ms:Math.max(0,Math.round(performance.now()-started)),error_message:null,fk_document_no:null,source_llm_log:null,preview_reference:{record_label:draft.name || 'Untitled configuration',source_name:draft.source_type==='document'?draft.document_type:draft.table}});
+    const proposal=changes.length?{baseContext:fingerprint(),changes,created_at:new Date().toISOString(),llm_log_no:run.llm_log_no}:null;
+    draft.assistant_messages.push({role:'user',content:message},{role:'assistant',content:response,llm_log_no:run.llm_log_no});
     draft.assistant_proposal=proposal;persist();
   }
   function bindAssistant() {
@@ -218,13 +224,14 @@
     form.addEventListener('submit',event=>{event.preventDefault();send(chatInput);});
     root.querySelectorAll('[data-chat-prompt]').forEach(button=>button.addEventListener('click',()=>send(button.dataset.chatPrompt)));
     root.querySelectorAll('[data-proposal-index]').forEach(input=>input.addEventListener('change',()=>{draft.assistant_proposal.changes[Number(input.dataset.proposalIndex)].selected=input.checked;persist();}));
-    root.querySelector('[data-dismiss-proposal]')?.addEventListener('click',()=>{draft.assistant_proposal=null;persist();renderAssistant();});
+    root.querySelector('[data-dismiss-proposal]')?.addEventListener('click',()=>{activity.review(draft.assistant_proposal.llm_log_no,{disposition:'dismissed',decided_at:new Date().toISOString()});draft.assistant_proposal=null;persist();renderAssistant();});
     root.querySelector('[data-apply-proposal]')?.addEventListener('click',()=>{
       const proposal=draft.assistant_proposal;
       if(proposal.baseContext!==fingerprint()){chatFeedback='Your inputs changed after this proposal. Ask again so new suggestions use your latest draft.';renderAssistant();return;}
       const selected=proposal.changes.filter(change=>change.selected);
       if(!selected.length){chatFeedback='Select at least one proposed change to apply.';renderAssistant();return;}
       selected.forEach(change=>set(draft,change.path,change.after));
+      activity.review(proposal.llm_log_no,{disposition:'applied to draft',applied_paths:selected.map(change=>change.path),decided_at:new Date().toISOString()});
       draft.assistant_messages.push({role:'assistant',content:`Applied ${selected.length} selected change(s) to your draft. All other inputs remain as you left them. Review and submit the configuration yourself when ready.`});
       draft.assistant_proposal=null;edited();chatFeedback='';render();notify('Selected suggestions applied to draft. Not submitted.');
     });
@@ -295,6 +302,7 @@
     else if(action.hasAttribute('data-export'))exportJSON();
     else if(action.hasAttribute('data-submit-review')) {if(validation().length){step=3;render();return;}root.querySelector('#configuration-submit').showModal();}
   });
+  window.addEventListener('finance-llm-storage-error',event=>error(event.detail));
   document.getElementById('reset-demo').hidden=true;
   const previewNote=document.querySelector('.finance-preview-note > span:nth-child(2)');
   previewNote.textContent='Configuration preview. Drafts, chat history, and reviewed snapshots stay in this browser tab. No imports, provider calls, or server submissions run.';

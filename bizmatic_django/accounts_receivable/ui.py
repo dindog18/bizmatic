@@ -69,6 +69,8 @@ def workspace_patterns(view, party_slug):
                 path(f"{slug}/<int:record_id>/edit/", view, {"resource": resource, "screen": "form"}, name=f"{name}_edit"),
             ])
     patterns.extend([
+        path("llm-logs/", view, {"resource": "llm-logs"}, name="llm_log_list"),
+        path("llm-logs/<int:record_id>/", view, {"resource": "llm-logs", "screen": "detail"}, name="llm_log_detail"),
         path("configuration/", view, {"resource": "configuration"}, name="configuration_list"),
         path("configuration/new/", view, {"resource": "configuration", "screen": "configuration"}, name="configuration_create"),
         path("configuration/<int:record_id>/", view, {"resource": "configuration", "screen": "configuration"}, name="configuration_detail"),
@@ -88,6 +90,7 @@ def render_workspace(request, mode, resource="overview", screen="list", record_i
         navigation.append({"key": key, "label": party + "s" if key == "parties" else label, "icon": icon, "url": reverse(f"{namespace}:{name}_list")})
     navigation.append({"key": "aging", "label": "Aging report", "icon": "clock", "url": reverse(f"{namespace}:aging")})
     navigation.append({"key": "configuration", "label": "Extraction setup", "icon": "sliders-h", "url": reverse(f"{namespace}:configuration_list")})
+    navigation.append({"key": "llm-logs", "label": "LLM activity", "icon": "history", "url": reverse(f"{namespace}:llm_log_list")})
     label = next((item["label"] for item in navigation if item["key"] == resource), title)
     config = {
         "mode": mode, "title": title, "party": party, "resource": resource,
