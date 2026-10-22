@@ -85,9 +85,9 @@ def _number(value):
 
 
 def _routing_document(document):
-    """Presentation metadata for the browser-only routing confirmation."""
+    """Current review metadata for routing confirmation and stale-page checks."""
     return {"id": document.pk, "name": document.file_name,
-            "review_status": document.review_status}
+            "review_status": document.review_status, "revision": document.updated_at.isoformat()}
 
 
 def document_list_context(params) -> dict[str, Any]:
@@ -125,6 +125,7 @@ def document_detail_context(document_no: int) -> dict[str, Any]:
         "page_title": f"Document #{document_no}", "section": "documents",
         "document": _document(document),
         "routing_documents": [_routing_document(document)],
+        "has_routing_history": document.routing_logs.exists(),
         "text_logs": [_log(log) for log in DocExtractionLog.objects.filter(fk_document_no=document).order_by("-created_at", "-pk")],
         "runs": [_log(log) for log in LLMExtractionLog.objects.filter(fk_document_no=document).order_by("-created_at", "-pk")],
     }

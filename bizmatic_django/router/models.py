@@ -1,4 +1,4 @@
-"""Routing configuration and history. These tables do not execute routing or imports."""
+"""Human routing configuration, execution history, and destination decisions."""
 
 from decimal import Decimal
 
@@ -89,6 +89,7 @@ class LLMRoutingLog(models.Model):
     """
 
     routing_log_no = models.AutoField(primary_key=True)
+    request_id = models.UUIDField(null=True, blank=True, db_index=True)
     source_document = models.ForeignKey(
         "document_extraction.Document", on_delete=models.CASCADE,
         related_name="routing_logs",
@@ -96,6 +97,17 @@ class LLMRoutingLog(models.Model):
     input_text = models.TextField(
         blank=True, help_text="Exact extraction text used for this routing attempt.",
     )
+    source_text_log = models.ForeignKey(
+        "document_extraction.DocExtractionLog", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="routing_logs",
+    )
+    source_llm_log = models.ForeignKey(
+        "document_extraction.LLMExtractionLog", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="routing_logs",
+    )
+    source_review_status = models.CharField(max_length=20, blank=True)
+    confirmed_unapproved = models.BooleanField(default=False)
+    source_revision = models.CharField(max_length=40, blank=True)
     prompt_text = models.TextField(blank=True, help_text="Exact routing prompt used for this attempt.")
     rules_snapshot = models.JSONField(
         default=list, blank=True,
@@ -109,6 +121,8 @@ class LLMRoutingLog(models.Model):
     response_text = models.TextField(
         null=True, blank=True, help_text="Original LLM response, including any returned JSON.",
     )
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_payload = models.JSONField(default=dict, blank=True)
     input_tokens = models.PositiveIntegerField(null=True, blank=True)
     output_tokens = models.PositiveIntegerField(null=True, blank=True)
     processing_time_ms = models.PositiveIntegerField(null=True, blank=True)
@@ -119,6 +133,16 @@ class LLMRoutingLog(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_document"],
+                condition=models.Q(status__in=["queued", "processing"]),
+                name="router_one_active_document",
+            ),
+            models.UniqueConstraint(
+                fields=["request_id", "source_document"], name="router_request_document_uq",
+            ),
+        ]
 
     def __str__(self):
         return f"Document #{self.source_document_id} - routing #{self.routing_log_no}"

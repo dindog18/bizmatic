@@ -41,6 +41,11 @@ LOGGING = {
             "level": os.getenv("DOC_EXTRACTION_LOG_LEVEL", "INFO").upper(),
             "propagate": False,
         },
+        "router": {
+            "handlers": ["extraction_console"],
+            "level": os.getenv("ROUTER_LOG_LEVEL", "INFO").upper(),
+            "propagate": False,
+        },
     },
 }
 

@@ -1,4 +1,4 @@
-/* Compose the preview and wire local interactions. All requests remain GET-only. */
+/* Compose routing screens and persist human configuration and review actions. */
 (() => {
   const ui = window.BizmaticRouterUI, e = ui.esc;
   ui.reviewDrafts = {};
@@ -9,7 +9,7 @@
     const pending = docs.filter(doc => ui.status(ui.latestLog(doc.id)) === "pending").length;
     const multi = docs.filter(doc => ui.logRoutes(ui.latestLog(doc.id)?.id).length > 1).length;
     const unmatched = docs.filter(doc => ui.status(ui.latestLog(doc.id)) === "unmatched").length;
-    const metrics = [["Sample documents", docs.length, "Across the routing workspace"], ["Needs review", pending, "Check proposed destinations"], ["Multiple destinations", multi, "Documents with more than one route"], ["No match", unmatched, "Review or add a destination"]];
+    const metrics = [["Routed documents", docs.length, "Most recent 500 routed documents"], ["Needs review", pending, "Check proposed destinations"], ["Multiple destinations", multi, "Documents with more than one route"], ["No match", unmatched, "Review or add a destination"]];
     const filtered = docs.filter(doc => {
       const log = ui.latestLog(doc.id), routes = ui.logRoutes(log?.id);
       return ui.matches(doc.name, doc.party, doc.type, doc.batch) && (!ui.filters.status || ui.status(log) === ui.filters.status) && (!ui.filters.module || routes.some(route => ui.destination(route.destination_id)?.module_name === ui.filters.module));
@@ -19,7 +19,7 @@
       const log = ui.latestLog(doc.id), routes = ui.logRoutes(log?.id);
       return `<tr><td><div class="router-file"><span class="router-file-icon"><span class="fas fa-file-alt" aria-hidden="true"></span></span><div><a class="fw-semibold" href="${ui.url("document", doc.id)}">${e(doc.name)}</a><div class="router-subtext">${e(doc.party)} · ${e(doc.batch)}</div></div></div></td><td>${e(doc.type)}</td><td><div class="router-destinations">${routes.length ? routes.map(route => `<span class="router-tag">${e(ui.destination(route.destination_id)?.name || "Unknown destination")}</span>`).join("") : '<span class="text-600">—</span>'}</div></td><td>${ui.badge(ui.status(log))}</td><td><a href="${ui.url("document", doc.id)}">${ui.status(log) === "pending" ? "Review" : "View"}</a></td></tr>`;
     });
-    return ui.heading("Document routing", "Review where extracted documents belong, and guide the router with clear rules.", `<a class="btn btn-falcon-default" href="${ui.config.documentsUrl}">Open documents</a>`) + ui.routingRequests() + `<div class="router-metrics">${metrics.map(([label, value, note]) => `<div class="card router-metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></div>`).join("")}</div>` + ui.card("Routing queue", ui.toolbar({ placeholder: "Search document, company or batch", statuses: ["pending", "approved", "rejected", "unmatched", "failed"], modules: true }) + (rows.length ? ui.table(["Document", "Document type", "Destinations", "Review status", "Action"], rows) : ui.empty("No documents found", "Try another search or clear the filters.", '<button class="btn btn-falcon-default" type="button" data-action="clear-filters">Clear filters</button>')) + page.footer);
+    return ui.heading("Document routing", "Review where extracted documents belong, and guide the router with clear rules.", `<a class="btn btn-falcon-default" href="${ui.config.documentsUrl}">Open documents</a>`) + `<div class="router-metrics">${metrics.map(([label, value, note]) => `<div class="card router-metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></div>`).join("")}</div>` + ui.card("Routing queue", ui.toolbar({ placeholder: "Search document, company or batch", statuses: ["pending", "approved", "rejected", "unmatched", "failed"], modules: true }) + (rows.length ? ui.table(["Document", "Document type", "Destinations", "Review status", "Action"], rows) : ui.empty("No documents found", "Try another search or clear the filters.", '<button class="btn btn-falcon-default" type="button" data-action="clear-filters">Clear filters</button>')) + page.footer);
   };
 
   ui.render = () => {
@@ -57,78 +57,74 @@
   ui.app.addEventListener("change", event => {
     const target = event.target;
     if (target.matches("select[data-filter]")) { ui.filters[target.dataset.filter] = target.value; ui.filters.page = 1; ui.render(); }
+    if (target.id === "router-module_name") ui.changeDestinationModule(target.form);
     if (target.closest("#router-config-form")) ui.configurationDirty = true;
   });
 
-  ui.app.addEventListener("click", event => {
+  ui.app.addEventListener("click", async event => {
     const button = event.target.closest("[data-action]");
     if (!button || button.disabled) return;
     const id = Number(button.dataset.id);
-    switch (button.dataset.action) {
+    try {
+      switch (button.dataset.action) {
       case "clear-filters": ui.filters = { q: "", status: "", module: "", page: 1 }; ui.render(); break;
       case "page": ui.filters.page = Number(button.dataset.page); ui.render(); break;
       case "toggle": {
         const row = ui.state[button.dataset.kind].find(item => item.id === id);
-        row.is_active = !row.is_active;
-        ui.save(`${row.name} ${row.is_active ? "enabled" : "disabled"} in this browser.`);
+        const saved = await ui.post(ui.apiURL("toggle", row.id, button.dataset.kind), { is_active: !row.is_active, revision: row.revision });
+        Object.assign(row, saved);
+        ui.render(); ui.notice(`${row.name} ${row.is_active ? "enabled" : "disabled"}.`);
         break;
       }
       case "add-route": ui.showAddRoute(Number(button.dataset.logId)); break;
       case "close-dialog": document.getElementById("router-dialog").close(); break;
       case "accuracy": {
         const log = ui.state.logs.find(row => row.id === id);
-        log.user_selected_accurate = !log.user_selected_accurate;
-        ui.save(log.user_selected_accurate ? "Sample response marked accurate." : "Accuracy feedback removed.");
+        const saved = await ui.post(ui.apiURL("accuracy", id), { accurate: !log.user_selected_accurate, revision: log.revision });
+        Object.assign(log, saved);
+        ui.render(); ui.notice(log.user_selected_accurate ? "Routing response marked accurate." : "Accuracy feedback removed.");
         break;
       }
       case "download-log": {
         const log = ui.state.logs.find(row => row.id === id);
         const blob = new Blob([JSON.stringify({ ...log, reviewed_routes: ui.logRoutes(id) }, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob), link = document.createElement("a");
-        link.href = url; link.download = `demo-routing-${id}.json`; link.click();
+        link.href = url; link.download = `routing-${id}.json`; link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         break;
       }
-      case "reset":
-        ui.openDialog("Reset the routing demo?", '<p>This restores the sample documents, rules, destinations, and review decisions in this browser.</p><div class="d-flex justify-content-end gap-2"><button type="button" class="btn btn-falcon-default" data-action="close-dialog">Cancel</button><button type="button" class="btn btn-danger" data-action="confirm-reset">Reset demo</button></div>');
-        break;
-      case "confirm-reset": {
-        try { localStorage.removeItem(ui.key); sessionStorage.removeItem(`${ui.key}.notice`); } catch { /* In-memory reset still works. */ }
-        ui.state = structuredClone(window.BizmaticRouterDemo);
-        ui.filters = { q: "", status: "", module: "", page: 1 };
-        ui.reviewDrafts = {}; ui.configurationDirty = false;
-        document.getElementById("router-dialog").close();
-        ui.render(); ui.notice("Routing demo reset to its original sample data.");
-        break;
-      }
+
     }
+    } catch (error) { ui.notice(error.message, true); }
   });
 
-  ui.app.addEventListener("submit", event => {
+  ui.app.addEventListener("submit", async event => {
     event.preventDefault();
     const form = event.target;
     if (form.id === "router-config-form") ui.submitConfiguration(form);
-    if (form.matches("[data-review-form]")) {
-      const route = ui.state.routes.find(row => row.id === Number(form.dataset.routeId));
-      route.review_notes = String(new FormData(form).get("review_notes")).trim();
-      const decision = event.submitter?.value || "notes";
-      if (decision !== "notes") route.review_status = decision;
-      delete ui.reviewDrafts[route.id];
-      ui.save(`${ui.destination(route.destination_id).name}: ${decision === "notes" ? "notes saved" : ui.label(decision).toLowerCase()} in this browser.`);
-    }
-    if (form.id === "router-add-route-form") {
-      const data = new FormData(form), reason = String(data.get("reason")).trim();
-      if (!reason) { const field = form.elements.reason; field.setCustomValidity("Enter a reason for adding this destination."); field.reportValidity(); return; }
-      ui.state.routes.push({ id: ui.nextId(ui.state.routes), log_id: Number(form.dataset.logId), destination_id: Number(data.get("destination_id")), confidence: null, reason, review_status: "pending", review_notes: "" });
-      document.getElementById("router-dialog").close(); ui.save("Destination added to this sample review.");
-    }
+    try {
+      if (form.matches("[data-review-form]")) {
+        const route = ui.state.routes.find(row => row.id === Number(form.dataset.routeId));
+        const decision = event.submitter?.value || "notes";
+        const saved = await ui.post(ui.apiURL("review", route.id), {
+          review_notes: String(new FormData(form).get("review_notes")).trim(), decision, revision: route.revision,
+        });
+        Object.assign(route, saved);
+        delete ui.reviewDrafts[route.id];
+        ui.render(); ui.notice(`${ui.destination(route.destination_id).name}: ${decision === "notes" ? "notes saved" : ui.label(decision).toLowerCase()}.`);
+      }
+      if (form.id === "router-add-route-form") {
+        const data = new FormData(form), reason = String(data.get("reason")).trim();
+        if (!reason) { const field = form.elements.reason; field.setCustomValidity("Enter a reason for adding this destination."); field.reportValidity(); return; }
+        const route = await ui.post(ui.apiURL("addRoute", form.dataset.logId), { destination_id: Number(data.get("destination_id")), reason });
+        ui.state.routes.push(route);
+        document.getElementById("router-dialog").close(); ui.render(); ui.notice("Destination added for review.");
+      }
+    } catch (error) { ui.notice(error.message, true); }
+
   });
   window.addEventListener("beforeunload", event => {
     if (ui.configurationDirty || Object.keys(ui.reviewDrafts).length) { event.preventDefault(); event.returnValue = ""; }
   });
   ui.render();
-  try {
-    const notice = sessionStorage.getItem(`${ui.key}.notice`);
-    if (notice) { ui.notice(notice); sessionStorage.removeItem(`${ui.key}.notice`); }
-  } catch { /* Optional saved feedback. */ }
 })();

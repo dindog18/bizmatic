@@ -1,4 +1,4 @@
-/* Destination and rule forms operate exclusively on router preview state. */
+/* Destination and rule forms save validated configuration to Django. */
 (() => {
   const ui = window.BizmaticRouterUI, e = ui.esc;
   const createLink = (name, label) => `<a class="btn btn-primary" href="${ui.url(name)}"><span class="fas fa-plus me-2" aria-hidden="true"></span>${label}</a>`;
@@ -26,11 +26,35 @@
   const activeField = row => `<div class="form-check form-switch mb-3"><input class="form-check-input" id="router-active" name="is_active" type="checkbox" ${row.is_active ? "checked" : ""}><label class="form-check-label" for="router-active">Active</label></div>`;
   const formFooter = list => `<div class="card-footer d-flex justify-content-end gap-2"><a class="btn btn-falcon-default" href="${ui.url(list)}">Cancel</a><button class="btn btn-primary" type="submit">Save ${list === "rules" ? "rule" : "destination"}</button></div>`;
 
+  const catalog = ui.config.destinationCatalog;
+  const targetChoices = (moduleName, saved) => {
+    const targets = [...(catalog.find(module => module.value === moduleName)?.targets || [])];
+    if (saved?.module_name === moduleName && saved.target_model && !targets.some(target => target.value === saved.target_model)) {
+      targets.push({ value: saved.target_model, label: `${saved.target_model} · Existing destination` });
+    }
+    return targets;
+  };
+  const targetOptions = (targets, value, hasModule) => `<option value="">${hasModule ? "Choose a target model" : "Choose a module first"}</option>${targets.map(target => `<option value="${e(target.value)}" ${value === target.value ? "selected" : ""}>${e(target.label)}${target.label === target.value ? "" : ` (${e(target.value)})`}</option>`).join("")}`;
+  const destinationSelectors = row => {
+    const modules = [...catalog];
+    if (row.module_name && !modules.some(module => module.value === row.module_name)) {
+      modules.push({ value: row.module_name, label: `${row.module_name} · Existing destination` });
+    }
+    return `<div class="mb-3"><label class="form-label" for="router-module_name">Module name <span class="text-danger" aria-hidden="true">*</span></label><select class="form-select" id="router-module_name" name="module_name" required aria-describedby="help-module_name"><option value="">Choose a module</option>${modules.map(module => `<option value="${e(module.value)}" ${row.module_name === module.value ? "selected" : ""}>${e(module.label)}</option>`).join("")}</select><div class="form-text" id="help-module_name">Select the accounting workspace that will receive the document.</div></div><div class="mb-3"><label class="form-label" for="router-target_model">Target model <span class="text-danger" aria-hidden="true">*</span></label><select class="form-select" id="router-target_model" name="target_model" required aria-describedby="help-target_model" ${row.module_name ? "" : "disabled"}>${targetOptions(targetChoices(row.module_name, row), row.target_model, Boolean(row.module_name))}</select><div class="form-text" id="help-target_model">Choose a record type from the selected module.</div></div>`;
+  };
+  ui.changeDestinationModule = form => {
+    const moduleName = form.elements.module_name.value;
+    const saved = ui.state.destinations.find(row => row.id === Number(form.dataset.id));
+    const target = form.elements.target_model;
+    target.innerHTML = targetOptions(targetChoices(moduleName, saved), "", Boolean(moduleName));
+    target.disabled = !moduleName;
+  };
+
   ui.renderers.destinationForm = () => {
     const editing = ui.config.screen === "destination_edit";
     const row = editing ? ui.destination(ui.config.recordId) : { name: "", module_name: "", target_model: "", description: "", is_active: true };
     if (!row) return ui.missing("destinations");
-    return ui.heading(editing ? "Edit destination" : "Add destination", "Define one module and record type that a document can be routed to.") + `<div class="router-form-layout"><form class="card router-form" id="router-config-form" data-kind="destinations" data-id="${editing ? row.id : ""}"><div class="card-header"><h2 class="fs-9 mb-0">Destination details</h2></div><div class="card-body"><div id="router-form-error" class="alert alert-danger" role="alert" tabindex="-1" hidden></div>${field("Name", "name", row.name, "A clear name that reviewers can recognize.", { required: true })}${field("Module name", "module_name", row.module_name, "Django app name, for example <code>accounts_payable</code>. Use lowercase letters and underscores.", { required: true, max: 100, pattern: "[a-z_][a-z0-9_]*" })}${field("Target model", "target_model", row.target_model, "Model name, for example <code>SupplierSalesInvoice</code>.", { required: true, max: 100, pattern: "[A-Za-z_][A-Za-z0-9_]*" })}${field("Description", "description", row.description, "Explain the purpose of this destination.", { textarea: true })}${activeField(row)}</div>${formFooter("destinations")}</form><aside class="router-form-help"><h2>Room for more modules</h2><p>Each destination identifies one record type in one module. You can configure several destinations within the same module.</p><p>A single document can belong to multiple destinations. For example, a delivery receipt may support supplier matching and inventory receiving.</p><hr><p class="mb-0">This preview saves sample configuration in this browser. Use the Routing rules tab to describe which documents should match.</p></aside></div>`;
+    return ui.heading(editing ? "Edit destination" : "Add destination", "Define one module and record type that a document can be routed to.") + `<div class="router-form-layout"><form class="card router-form" id="router-config-form" data-kind="destinations" data-id="${editing ? row.id : ""}"><div class="card-header"><h2 class="fs-9 mb-0">Destination details</h2></div><div class="card-body"><div id="router-form-error" class="alert alert-danger" role="alert" tabindex="-1" hidden></div>${field("Name", "name", row.name, "A clear name that reviewers can recognize.", { required: true })}${destinationSelectors(row)}${field("Description", "description", row.description, "Explain the purpose of this destination.", { textarea: true })}${activeField(row)}</div>${formFooter("destinations")}</form><aside class="router-form-help"><h2>Room for more modules</h2><p>Each destination identifies one record type in one module. You can configure several destinations within the same module.</p><p>A single document can belong to multiple destinations. For example, a delivery receipt may support supplier matching and inventory receiving.</p><hr><p class="mb-0">Configuration is saved in the application database. Use the Routing rules tab to describe which documents should match.</p></aside></div>`;
   };
 
   ui.renderers.ruleForm = () => {
@@ -40,22 +64,32 @@
     return ui.heading(editing ? "Edit routing rule" : "Add routing rule", "Describe the documents that belong at a destination, using plain language.") + `<div class="router-form-layout"><form class="card router-form" id="router-config-form" data-kind="rules" data-id="${editing ? row.id : ""}"><div class="card-header"><h2 class="fs-9 mb-0">Rule details</h2></div><div class="card-body"><div id="router-form-error" class="alert alert-danger" role="alert" tabindex="-1" hidden></div>${field("Rule name", "name", row.name, "", { required: true })}<div class="mb-3"><label class="form-label" for="router-destination">Destination <span class="text-danger" aria-hidden="true">*</span></label><select id="router-destination" name="destination_id" class="form-select" required><option value="">Choose a destination</option>${ui.state.destinations.map(dest => `<option value="${dest.id}" ${row.destination_id === dest.id ? "selected" : ""}>${e(dest.name)} · ${e(ui.moduleLabel(dest.module_name))}${dest.is_active ? "" : " (inactive)"}</option>`).join("")}</select></div>${field("Document type", "document_type", row.document_type, "Business type, such as delivery receipt or sales invoice. Optional.", { max: 100 })}${field("Routing instructions", "instructions", row.instructions, "Explain who issued the document, who received it, and when this destination should be excluded.", { textarea: true, required: true })}${field("Examples", "examples", row.examples, "Give positive and negative examples to reduce ambiguity.", { textarea: true })}${activeField(row)}</div>${formFooter("rules")}</form><aside class="router-form-help"><h2>Make the distinction clear</h2><p>“Sales invoice” can describe a supplier invoice or a company invoice. Describe the issuer and recipient to tell them apart.</p><p><strong>Example instruction</strong><br>Include invoices issued by a supplier to Bizmatic Trading. Exclude invoices issued by Bizmatic Trading to customers.</p><hr><p class="mb-0">Rules can overlap across modules. Disabling a rule keeps it available for editing. Existing attempt snapshots stay as they were.</p></aside></div>`;
   };
 
-  ui.submitConfiguration = form => {
+  ui.submitConfiguration = async form => {
     const data = new FormData(form), kind = form.dataset.kind, id = Number(form.dataset.id);
     const error = message => { const node = document.getElementById("router-form-error"); node.textContent = message; node.hidden = false; node.focus(); };
     const row = Object.fromEntries([...data.entries()].map(([key, value]) => [key, String(value).trim()]));
     row.is_active = data.has("is_active");
     if (!row.name || (kind === "rules" && !row.instructions)) return error("Enter a name and complete the required fields.");
     if (kind === "destinations") {
+      if (!row.module_name || !row.target_model) return error("Choose a module and a target model.");
       if (ui.state.destinations.some(dest => dest.id !== id && dest.module_name.toLowerCase() === row.module_name.toLowerCase() && dest.target_model.toLowerCase() === row.target_model.toLowerCase())) return error("This module and model already have a destination. Edit the existing destination instead.");
     } else {
       row.destination_id = Number(row.destination_id);
       if (!ui.destination(row.destination_id)) return error("Choose an existing destination.");
     }
-    row.id = id || ui.nextId(ui.state[kind]);
-    if (id) ui.state[kind] = ui.state[kind].map(item => item.id === id ? row : item);
-    else ui.state[kind].push(row);
-    ui.configurationDirty = false;
-    ui.save(`${kind === "rules" ? "Rule" : "Destination"} saved in this browser.`, ui.url(kind));
+    const current = id ? ui.state[kind].find(item => item.id === id) : null;
+    row.revision = current?.revision;
+    const controls = [...form.elements];
+    const disabled = controls.map(control => control.disabled);
+    controls.forEach(control => { control.disabled = true; });
+    try {
+      await ui.post(ui.apiURL(id ? "configurationEdit" : "configuration", id, kind), row);
+      ui.configurationDirty = false;
+      location.assign(ui.url(kind));
+    } catch (failure) {
+      controls.forEach((control, index) => { control.disabled = disabled[index]; });
+      error(failure.message);
+    }
+
   };
 })();
