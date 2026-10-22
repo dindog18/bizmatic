@@ -1,3 +1,10 @@
-from django.shortcuts import render
+"""GET-only frontend previews; accounting persistence is intentionally absent."""
 
-# Create your views here.
+from django.views.decorators.http import require_safe
+
+from accounts_receivable.ui import render_workspace
+
+
+@require_safe
+def workspace(request, **kwargs):
+    return render_workspace(request, "ap", **kwargs)

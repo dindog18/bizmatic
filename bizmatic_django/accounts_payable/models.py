@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models, transaction
@@ -1096,3 +1097,106 @@ class PaymentAllocation(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["payment", "invoice"], name="ap_payment_invoice_uq")
         ]
+
+
+class ExtractionConfiguration(models.Model):
+    """User-reviewed instructions for entering one kind of accounting record.
+
+    A profile describes either database mapping or document extraction, scoped
+    to the module or an existing Supplier. It never imports or encodes a record
+    by itself. The frontend currently previews these fields in browser storage;
+    persistence, provider calls, validation services, and migrations are deferred.
+    Existing per-record context/provenance fields retain their current meaning.
+    """
+
+    class TargetEntity(models.TextChoices):
+        SUPPLIER = "supplier", "Supplier"
+        PURCHASE_ORDER = "purchase_order", "Purchase order"
+        DELIVERY_RECEIPT = "delivery_receipt", "Delivery receipt"
+        SALES_INVOICE = "sales_invoice", "Sales invoice"
+        PAYMENT = "payment", "Payment"
+
+    class SourceType(models.TextChoices):
+        DATABASE = "database", "Database extraction"
+        DOCUMENT = "document", "Document extraction"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        SUBMITTED = "submitted", "Submitted by user"
+
+    name = models.CharField(max_length=160)
+    description = models.TextField(blank=True)
+    target_entity = models.CharField(max_length=30, choices=TargetEntity.choices)
+    source_type = models.CharField(max_length=20, choices=SourceType.choices)
+    supplier = models.ForeignKey(
+        "Supplier", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="extraction_configurations",
+        help_text="Blank applies module-wide; otherwise use this account's layout or mapping.",
+    )
+
+    # Schema metadata identifies external fields; no credentials or SQL are stored.
+    database_source = models.ForeignKey(
+        "db_extraction.DatabaseSource", on_delete=models.PROTECT, null=True,
+        blank=True, related_name="ap_extraction_configurations",
+    )
+    source_table = models.ForeignKey(
+        "db_extraction.DatabaseTable", on_delete=models.PROTECT, null=True,
+        blank=True, related_name="ap_header_configurations",
+    )
+    line_source_table = models.ForeignKey(
+        "db_extraction.DatabaseTable", on_delete=models.PROTECT, null=True,
+        blank=True, related_name="ap_line_configurations",
+    )
+    source_schema_snapshot = models.JSONField(
+        default=dict, blank=True,
+        help_text="Connection/table labels and inspected columns at configuration time; not business rows.",
+    )
+    source_key_fields = models.JSONField(
+        default=list, blank=True, help_text="External header key column names, including composite keys.",
+    )
+    # {target_field: {source: column_name, transform: name, default: value}}
+    field_mappings = models.JSONField(default=dict, blank=True)
+    line_item_mappings = models.JSONField(default=dict, blank=True)
+    # [{header_column: 'id', line_column: 'invoice_id'}]
+    line_join_fields = models.JSONField(default=list, blank=True)
+    # Resolve external account codes to local records instead of copying raw IDs.
+    relation_lookups = models.JSONField(
+        default=dict, blank=True,
+        help_text="Target relation, matching account field, and missing-account review policy.",
+    )
+
+    document_type = models.CharField(max_length=100, blank=True)
+    extraction_context = models.TextField(blank=True)
+    field_instructions = models.JSONField(
+        default=dict, blank=True, help_text="Instructions keyed by destination model field name.",
+    )
+    line_field_instructions = models.JSONField(
+        default=dict, blank=True, help_text="Line-field guidance, separate from identically named header fields.",
+    )
+    line_item_context = models.TextField(blank=True)
+    sample_text = models.TextField(blank=True, help_text="Optional user-supplied example for assisted configuration.")
+    # Dates, decimal separators, default currency, required fields and duplicates.
+    encoding_rules = models.JSONField(default=dict, blank=True)
+
+    # Assistant output is a proposal. Only a later explicit user submission may
+    # set submitted_at/by and capture the exact reviewed configuration snapshot.
+    assistant_messages = models.JSONField(default=list, blank=True)
+    assistant_proposal = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    revision = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    submitted_snapshot = models.JSONField(default=dict, blank=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="ap_submitted_extraction_configurations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["target_entity", "name", "pk"]
+        verbose_name = "AP extraction configuration"
+        verbose_name_plural = "AP extraction configurations"
+
+    def __str__(self):
+        return f"{self.name} ({self.get_target_entity_display()} · {self.get_source_type_display()})"

@@ -25,6 +25,11 @@
         </div>
         <div class="collapse navbar-collapse" id="navbarVerticalCollapse">
           <div class="navbar-vertical-content scrollbar">
+            <div class="navbar-vertical-label mt-3 mb-2 px-3">Accounting workspace</div>
+            <ul class="navbar-nav flex-column mb-3">
+              <li class="nav-item"><a class="nav-link {% if section == 'receivables' %}active{% endif %}" {% if section == 'receivables' %}aria-current="page"{% endif %} href="{% url 'ACCOUNTS_RECEIVABLE:overview' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-arrow-down" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Accounts receivable</span></div></a></li>
+              <li class="nav-item"><a class="nav-link {% if section == 'payables' %}active{% endif %}" {% if section == 'payables' %}aria-current="page"{% endif %} href="{% url 'ACCOUNTS_PAYABLE:overview' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-arrow-up" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Accounts payable</span></div></a></li>
+            </ul>
             <div class="navbar-vertical-label mt-3 mb-2 px-3">Document workspace</div>
             <ul class="navbar-nav flex-column mb-3">
               <li class="nav-item"><a class="nav-link {% if section == 'documents' %}active{% endif %}" {% if section == 'documents' %}aria-current="page"{% endif %} href="{% url 'DOC_EXTRACTION:document_list' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-file-alt" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Documents</span></div></a></li>
