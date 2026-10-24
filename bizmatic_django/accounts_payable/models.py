@@ -1106,8 +1106,8 @@ class ExtractionConfiguration(models.Model):
 
     A profile describes either database mapping or document extraction, scoped
     to the module or an existing Supplier. It never imports or encodes a record
-    by itself. The frontend currently previews these fields in browser storage;
-    persistence, provider calls, validation services, and migrations are deferred.
+    by itself. Drafts are saved through the workspace; only explicitly submitted snapshots
+    are used by extraction.
     Existing per-record context/provenance fields retain their current meaning.
     """
 
@@ -1180,6 +1180,9 @@ class ExtractionConfiguration(models.Model):
     # Dates, decimal separators, default currency, required fields and duplicates.
     encoding_rules = models.JSONField(default=dict, blank=True)
 
+    # Record-first source choices, annotations and structured query; never executable SQL.
+    setup_data = models.JSONField(default=dict, blank=True)
+
     # Assistant output is a proposal. Only a later explicit user submission may
     # set submitted_at/by and capture the exact reviewed configuration snapshot.
     assistant_messages = models.JSONField(default=list, blank=True)
@@ -1209,8 +1212,8 @@ class LLMExtractionLog(models.Model):
 
     Existing source_llm_log fields still identify document-extraction evidence.
     This history covers accounting extraction and configuration assistance.
-    Recording attempts and calling providers require a future backend; the UI
-    currently stores explicitly simulated attempts in this browser tab only.
+    Attempts preserve provider inputs, outputs, errors, and the configuration
+    snapshot used to create the accounting record.
     """
 
     class Purpose(models.TextChoices):
@@ -1221,6 +1224,10 @@ class LLMExtractionLog(models.Model):
     configuration = models.ForeignKey(
         "ExtractionConfiguration", on_delete=models.PROTECT, null=True,
         blank=True, related_name="llm_logs",
+    )
+    routing_route = models.ForeignKey(
+        "router.DocumentRoute", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="ap_extraction_logs",
     )
     configuration_revision = models.PositiveIntegerField(
         null=True, blank=True, validators=[MinValueValidator(1)],
@@ -1286,3 +1293,18 @@ class LLMExtractionLog(models.Model):
 
     def __str__(self):
         return f"AP LLM #{self.llm_log_no} · {self.get_status_display()}"
+
+
+class DatabaseImportRun(models.Model):
+    """One explicit, bounded import from a submitted database configuration."""
+
+    configuration = models.ForeignKey(ExtractionConfiguration, on_delete=models.PROTECT, related_name="import_runs")
+    request_id = models.UUIDField(unique=True)
+    configuration_snapshot = models.JSONField(default=dict)
+    status = models.CharField(max_length=20, default="processing")
+    result = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]

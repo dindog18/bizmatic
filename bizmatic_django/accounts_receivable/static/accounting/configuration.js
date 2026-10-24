@@ -1,4 +1,4 @@
-/* Configuration UX prototype: no fetch, provider calls, imports, or server writes. */
+/* Reviewed accounting configurations backed by Django. */
 (() => {
   'use strict';
   const config = JSON.parse(document.getElementById('finance-config').textContent);
@@ -7,49 +7,84 @@
   const catalog = config.configurationCatalog;
   const schema = window.BizmaticConfigurationSchema;
   const activity = window.BizmaticLLMLogs;
-  const storageKey = `bizmatic-configuration-v1-${config.mode}`;
+  const api = window.BizmaticAccounting;
   const baseURL = config.routes.configuration;
   const parameters = new URLSearchParams(location.search);
   const partyKey = config.mode === 'ar' ? 'customer' : 'supplier';
-  let parties;
-  try { parties = JSON.parse(sessionStorage.getItem(`bizmatic-finance-v2-${config.mode}`))?.parties; } catch { /* Use synthetic accounts below. */ }
-  parties = Array.isArray(parties) ? parties : window.BizmaticFinanceDemo(config.mode).parties;
-  let state;
-  try { state = JSON.parse(sessionStorage.getItem(storageKey)); } catch { /* New local preview. */ }
-  if (!state || !Array.isArray(state.profiles)) state = {profiles:schema.initial(catalog), pending:null};
+  const parties = api.state.parties;
+  const state = {profiles:api.state.profiles, pending:null};
   let draft = null;
+  let dirty = false;
+  const importRuns = api.state.import_runs || [];
   let step = Math.min(3,Math.max(0,Math.trunc(Number(parameters.get('step'))) || 0));
   let chatInput = '';
   let chatFeedback = '';
+  let assistantErrorLog = null;
+  let chatBusy = false;
+  let showAdvanced = false;
+  let review = null;
+  let sampleDocument = '';
+  let example = null;
+  let selectedTarget = '';
+  let selectedSource = '';
+  let contextInfo = null;
+  let contextBusy = false;
+  let contextFeedback = '';
+  let lastCleared = null;
+  let resetBusy = false;
+  let contextVersion = 0;
+  const sessions = new Map();
+  const selection = () => ({target_entity:selectedTarget,source_type:selectedSource});
+  const sessionKey = () => `${selectedTarget}:${selectedSource}`;
+  const targetLabel = target => target.key==='sales_invoice'?'Invoices':target.label;
   const esc = (value='') => String(value ?? '').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const icon = name => `<span class="fas fa-${name}" aria-hidden="true"></span>`;
   const link = (href,text,primary=false) => `<a class="btn ${primary?'btn-primary':'btn-falcon-default'}" href="${esc(href)}">${text}</a>`;
   const targetFor = profile => catalog.find(target=>target.key===profile.target_entity);
   const sourceLabel = value => value==='database'?'Database mapping':'Document context';
-  const scopeLabel = profile => profile.scope==='module'?`All ${config.party.toLowerCase()}s (module default)`:`${parties.find(p=>String(p.id)===profile.scope)?.name || 'Account unavailable'} (sample account)`;
+  const scopeLabel = profile => profile.scope==='module'?`All ${config.party.toLowerCase()}s (module default)`:`${parties.find(p=>String(p.id)===profile.scope)?.name || 'Account unavailable'}`;
   const splitColumns = text => [...new Set(String(text || '').split(/[\n,]/).map(value=>value.trim()).filter(Boolean))];
   const joinPairs = text => String(text || '').split(',').map(pair=>pair.split('=').map(value=>value.trim())).filter(pair=>pair.length===2 && pair.every(Boolean)).map(([header_column,line_column])=>({header_column,line_column}));
-  const get = (object,path) => path.split('.').reduce((value,key)=>value?.[key],object) ?? '';
   function set(object,path,value) { const keys=path.split('.'); const last=keys.pop(); let parent=object; for(const key of keys) parent=parent[key] ||= {}; parent[last]=value; }
-  const same = (a,b) => JSON.stringify(a)===JSON.stringify(b);
-  const status = profile => `<span class="finance-status ${profile.status==='submitted'?'success':'info'}">${profile.status==='submitted'?'Submitted · preview':'Draft'}</span>`;
+  const status = profile => `<span class="finance-status ${profile.status==='submitted'?'success':'info'}">${profile.status==='submitted'?'Submitted':'Draft'}</span>`;
   function notify(message) { const element=document.getElementById('finance-toast'); element.textContent=message; element.hidden=false; setTimeout(()=>{element.hidden=true;},4500); }
   function persist() {
-    try { sessionStorage.setItem(storageKey,JSON.stringify(state)); const saved=root.querySelector('#config-save-state');if(saved)saved.textContent='Saved in this tab';const output=root.querySelector('#config-output');if(output&&draft)output.textContent=JSON.stringify(payload(),null,2);return true; }
-    catch { const saved=root.querySelector('#config-save-state');if(saved)saved.textContent='Could not save locally';error('Browser storage is unavailable. Export your draft to keep it before leaving this page.');return false; }
+    const saved=root.querySelector('#config-save-state');if(saved)saved.textContent='Unsaved changes';
+    const output=root.querySelector('#config-output');if(output&&draft)output.textContent=JSON.stringify(payload(),null,2);
+    return true;
   }
   function error(message) { let element=root.querySelector('#config-error');if(!element){root.insertAdjacentHTML('afterbegin','<div id="config-error" class="finance-form-error" role="alert" tabindex="-1"></div>');element=root.querySelector('#config-error');}element.hidden=false;element.textContent=message;element.focus(); }
   function edited() {
-    if(draft.status==='submitted'){draft.revision+=1;draft.status='draft';}
+    dirty = true;
+    review = null;
+    example = null;
+    root.querySelector('[data-sample-output]')?.remove();
+    if(draft.status==='submitted')draft.status='draft';
     if(draft.id===null)state.pending=draft;
     persist();
   }
-  function hasContent(profile) {
-    return Boolean(profile.name || profile.description || profile.table || profile.columns || profile.document_type || profile.extraction_context || profile.sample_text || profile.assistant_messages.length || Object.keys(profile.field_mappings).length || !same(profile.encoding_rules,schema.blank(targetFor(profile)).encoding_rules));
+  function rememberURL() { const route=draft.id===null?config.configurationCreate:baseURL+draft.id+'/';history.replaceState(null,'',`${route}?step=${step}&target=${draft.target_entity}&source=${draft.source_type}`); }
+  async function saveDraft() {
+    if(!review)return;
+    try {
+      const result=await api.post(review.submit?'submit':'configuration',draft.id,{
+        configuration:payload().configuration, messages:draft.assistant_messages,
+        confirmation_token:review.token, confirmed:true, submit:review.submit,
+      });
+      Object.assign(draft,result.record);dirty=false;review=null;
+      if(!state.profiles.some(row=>row.id===draft.id))state.profiles.push(draft);
+      state.pending=null;rememberURL();render();notify('Your confirmed configuration has been saved.');
+    } catch(problem) {root.querySelector('#config-confirm-error').textContent=problem.message;}
   }
-  function assignId(profile) { if(profile.id===null){profile.id=Math.max(0,...state.profiles.map(p=>p.id))+1;state.profiles.push(profile);if(state.pending===profile)state.pending=null;} }
-  function rememberURL() { const route=draft.id===null?config.configurationCreate:baseURL+draft.id+'/';history.replaceState(null,'',`${route}?step=${step}`); }
-  function saveDraft() { assignId(draft); if(persist()){rememberURL();render();notify('Configuration draft saved in this tab.');} }
+  async function requestReview(submit) {
+    const version=contextVersion;
+    try {
+      const result=await api.post('configuration-review',draft.id,{configuration:payload().configuration,submit});
+      if(version!==contextVersion)return;
+      review={token:result.confirmation_token,submit};
+      render();root.querySelector('#configuration-submit').showModal();
+    } catch(problem) {if(version===contextVersion)error(problem.message);}
+  }
   function field(path,label,value='',options={}) {
     const id='config-'+path.replaceAll('.','-');
     const common=`id="${id}" aria-label="${esc(label)}" data-path="${path}" aria-required="${Boolean(options.required)}" class="${options.code?'config-code-input ':''}${options.choices?'form-select':'form-control'}"`;
@@ -61,16 +96,17 @@
   }
   const card = (title,body,action='')=>`<section class="card mb-3"><div class="finance-card-head"><h2>${title}</h2>${action}</div>${body}</section>`;
   function list() {
-    root.innerHTML=`<header class="finance-heading"><div><h1>Extraction configuration</h1><p>Define how source data becomes ${config.party.toLowerCase()}s, orders, deliveries, invoices, and payments.</p></div><div class="finance-actions">${link(config.configurationCreate+'?fresh=1',icon('plus')+' New configuration',true)}</div></header><div class="finance-callout">Configure the inputs here. Extracted accounting records remain read-only. Assistant suggestions become draft changes only when you apply them; final submission is always yours.</div><div class="config-targets">${catalog.map(target=>{const count=state.profiles.filter(p=>p.target_entity===target.key).length;return `<a class="config-target" href="${esc(config.configurationCreate+'?target='+target.key)}">${icon({customer:'address-book',supplier:'address-book',purchase_order:'shopping-cart',delivery_receipt:'truck',sales_invoice:'file-invoice-dollar',payment:'credit-card'}[target.key])}<strong>${esc(target.label)}</strong><small>${count} configuration${count===1?'':'s'} · Configure ${icon('arrow-right')}</small></a>`;}).join('')}</div>${state.pending?`<div class="finance-callout">You have an unfinished configuration for ${esc(targetFor(state.pending).label.toLowerCase())}. ${link(config.configurationCreate,'Continue draft')}</div>`:''}${card('Your configurations',`<div class="finance-toolbar"><label class="visually-hidden" for="config-search">Search configurations</label><input class="form-control" type="search" id="config-search" placeholder="Search name, target, or source"></div><div id="configuration-list"></div>`)}`;
-    const renderRows=query=>{const rows=state.profiles.filter(profile=>`${profile.name} ${targetFor(profile).label} ${sourceLabel(profile.source_type)}`.toLowerCase().includes(query.toLowerCase()));root.querySelector('#configuration-list').innerHTML=`<div class="table-responsive"><table class="table finance-table"><caption class="visually-hidden">Local extraction configuration profiles</caption><thead><tr><th>Configuration</th><th>Target</th><th>Source</th><th>Status</th><th></th></tr></thead><tbody>${rows.map(profile=>`<tr><td><a class="primary-link" href="${baseURL+profile.id+'/'}">${esc(profile.name || 'Untitled configuration')}</a><span class="subtext">${esc(scopeLabel(profile))} · Revision ${profile.revision}</span></td><td>${esc(targetFor(profile).label)}</td><td>${sourceLabel(profile.source_type)}</td><td>${status(profile)}</td><td><a href="${baseURL+profile.id+'/'}">Configure ${icon('arrow-right')}</a></td></tr>`).join('') || '<tr><td colspan="5" class="text-center p-4 text-600">No matching configurations. Create one using the button above.</td></tr>'}</tbody></table></div>`;};
+    root.innerHTML=`<header class="finance-heading"><div><h1>Extraction configuration</h1><p>Define how source data becomes ${config.party.toLowerCase()}s, orders, deliveries, invoices, and payments.</p></div><div class="finance-actions">${link(config.configurationCreate+'?fresh=1',icon('plus')+' New configuration',true)}</div></header><div class="finance-callout">Configure the inputs here. Extracted accounting records remain read-only. Chat builds your working configuration. Review the guide and confirm before saving.</div><div class="config-targets">${catalog.map(target=>{const count=state.profiles.filter(p=>p.target_entity===target.key).length;return `<a class="config-target" href="${esc(config.configurationCreate+'?target='+target.key)}">${icon({customer:'address-book',supplier:'address-book',purchase_order:'shopping-cart',delivery_receipt:'truck',sales_invoice:'file-invoice-dollar',payment:'credit-card'}[target.key])}<strong>${esc(target.label)}</strong><small>${count} configuration${count===1?'':'s'} · Configure ${icon('arrow-right')}</small></a>`;}).join('')}</div>${state.pending?`<div class="finance-callout">You have an unfinished configuration for ${esc(targetFor(state.pending).label.toLowerCase())}. ${link(config.configurationCreate,'Continue draft')}</div>`:''}${card('Your configurations',`<div class="finance-toolbar"><label class="visually-hidden" for="config-search">Search configurations</label><input class="form-control" type="search" id="config-search" placeholder="Search name, target, or source"></div><div id="configuration-list"></div>`)}`;
+    const renderRows=query=>{const rows=state.profiles.filter(profile=>`${profile.name} ${targetFor(profile).label} ${sourceLabel(profile.source_type)}`.toLowerCase().includes(query.toLowerCase()));root.querySelector('#configuration-list').innerHTML=`<div class="table-responsive"><table class="table finance-table"><caption class="visually-hidden">Saved extraction configurations</caption><thead><tr><th>Configuration</th><th>Target</th><th>Source</th><th>Status</th><th></th></tr></thead><tbody>${rows.map(profile=>`<tr><td><a class="primary-link" href="${baseURL+profile.id+'/'}">${esc(profile.name || 'Untitled configuration')}</a><span class="subtext">${esc(scopeLabel(profile))} · Revision ${profile.revision}</span></td><td>${esc(targetFor(profile).label)}</td><td>${sourceLabel(profile.source_type)}</td><td>${status(profile)}</td><td><a href="${baseURL+profile.id+'/'}">Configure ${icon('arrow-right')}</a></td></tr>`).join('') || '<tr><td colspan="5" class="text-center p-4 text-600">No matching configurations. Create one using the button above.</td></tr>'}</tbody></table></div>`;};
     renderRows('');root.querySelector('#config-search').addEventListener('input',event=>renderRows(event.target.value));
   }
   function sourceStep() {
     const target=targetFor(draft);
-    const common=`<div class="finance-form-grid">${field('name','Configuration name',draft.name,{required:true,full:true,placeholder:'e.g. Sales invoices · ERP mapping'})}${field('target_entity','Record type',draft.target_entity,{choices:catalog.map(t=>[t.key,t.label]),disabled:draft.id!==null,hint:draft.id!==null?'Create a new configuration to target another record type.':''})}${field('scope','Applies to',draft.scope,{choices:[['module',`All ${config.party.toLowerCase()}s`],...parties.map(p=>[p.id,p.name+' (sample)'])]})}${field('description','Purpose / existing business context',draft.description,{textarea:true,full:true,placeholder:'Describe this data source, document layout, or business convention.'})}</div>`;
-    const toggle=`<div class="config-source-toggle" role="group" aria-label="Configuration source"><button type="button" data-source="database" aria-pressed="${draft.source_type==='database'}">${icon('database')} Database mapping</button><button type="button" data-source="document" aria-pressed="${draft.source_type==='document'}">${icon('file-alt')} Document extraction context</button></div>`;
-    const source=draft.source_type==='database'?`<div class="finance-callout">Describe the header and line tables, then map their columns. This preview uses editable sample schema metadata; it does not connect to a database.</div><div class="finance-actions mb-3"><button class="btn btn-falcon-default" type="button" data-use-sample>${icon('table')} Use sample schema</button>${link(config.sources.databases,'Browse database connections')}</div><div class="finance-form-grid">${field('connection','Connection reference',draft.connection,{required:true,placeholder:'ERP connection name'})}${field('table','Header table (schema.table)',draft.table,{required:true,code:true,placeholder:'public.invoices'})}${field('source_keys','Header record key columns',draft.source_keys,{required:true,full:true,code:true,placeholder:'id, company_id',hint:'Comma-separated columns. Composite keys are supported.'})}${field('columns','Header columns',draft.columns,{required:true,textarea:true,full:true,code:true,rows:5,placeholder:'One column per line',hint:'Paste observed column names or use the sample. Suggestions use this list, not a live schema.'})}${target.lineModel?`<div class="full"><label class="form-check"><input class="form-check-input" type="checkbox" data-path="include_lines" ${draft.include_lines?'checked':''}><span class="form-check-label">Configure ${esc(target.lineModel)} line items</span></label></div>${draft.include_lines?`${field('line_table','Line table (schema.table)',draft.line_table,{required:true,code:true})}${field('line_joins','Header → line join',draft.line_joins,{required:true,code:true,placeholder:'id=invoice_id',hint:'Pairs such as id=invoice_id, company_id=company_id.'})}${field('line_columns','Line columns',draft.line_columns,{required:true,textarea:true,full:true,code:true,rows:4,placeholder:'One column per line'})}`:''}`:''}</div>`:`<div class="finance-callout">Describe what to read, how to distinguish similar fields, and when to request review. These instructions configure future extraction; no documents are processed here.</div><div class="finance-form-grid">${field('document_type','Document type / layout',draft.document_type,{required:true,full:true,placeholder:'e.g. Sales invoice · Supplier A layout'})}${field('sample_text','Optional example text',draft.sample_text,{textarea:true,full:true,rows:5,placeholder:'Paste a short example to give the assistant more context.',hint:'Used as configuration context only. This preview does not extract data from the example.'})}</div><div class="finance-actions mt-3">${link(config.sources.documents,'Browse documents')}${link(config.sources.upload,'Open document upload')}</div>`;
-    return card('1. Record and source',`<div class="finance-card-body">${common}<hr class="my-4">${toggle}${source}</div>`);
+    const common=`<div class="finance-form-grid">${field('name','Configuration name',draft.name,{required:true,full:true,placeholder:'e.g. Sales invoices · ERP mapping'})}${field('scope','Applies to',draft.scope,{choices:[['module',`All ${config.party.toLowerCase()}s`],...parties.map(p=>[p.id,p.name])]})}${field('description','Purpose / existing business context',draft.description,{textarea:true,full:true,placeholder:'Describe this data source, document layout, or business convention.'})}</div>`;
+    const tables=api.state.tables.filter(table=>String(table.source_id)===String(draft.database_source));
+    const choices=[['','Choose a table'],...tables.map(table=>[table.id,table.label])];
+    const source=draft.source_type==='database'?`<div class="finance-callout">Choose saved schema metadata, then map its columns. Imports read only the selected tables.</div><div class="finance-form-grid">${field('database_source','Database connection',draft.database_source || '',{required:true,choices:[['','Choose a connection'],...api.state.sources.map(source=>[source.id,source.name])]})}${field('source_table','Header table',draft.source_table || '',{required:true,choices})}${field('source_keys','Header record key columns',draft.source_keys,{required:true,full:true,placeholder:'id, company_id'})}<div class="full"><label>Header columns</label><pre>${esc(draft.columns)}</pre></div>${target.lineModel?`${field('line_source_table','Line table',draft.line_source_table || '',{required:true,choices})}${field('line_joins','Header → line join',draft.line_joins,{required:true,placeholder:'id=invoice_id'})}<div class="full"><label>Line columns</label><pre>${esc(draft.line_columns)}</pre></div>`:''}</div>`:`<div class="finance-form-grid">${field('document_type','Document type / layout',draft.document_type,{required:true,full:true})}${field('sample_text','Optional example text',draft.sample_text,{textarea:true,full:true,rows:5,hint:'Used as configuration context only.'})}</div>`;
+    return card('1. Record and source',`<div class="finance-card-body">${common}<hr class="my-4">${source}</div>`);
   }
   function mappingTable(fields,line=false) {
     const map=line?draft.line_item_mappings:draft.field_mappings;
@@ -87,7 +123,7 @@
   function rulesStep() {
     const target=targetFor(draft);const choices=draft.source_type==='document'?`<div class="config-instructions mt-3">${target.fields.map(info=>`<label class="form-check"><input class="form-check-input" type="checkbox" data-required="${info.key}" ${draft.encoding_rules.required_fields.includes(info.key)?'checked':''} ${info.required?'disabled':''}><span class="form-check-label">Require ${esc(info.label.toLowerCase())} <code>${esc(info.key)}</code></span></label>`).join('')}</div>`:'';
     const lineChoices=draft.source_type==='document'&&target.lineModel?`<h3 class="fs-10 mt-4">Required line item fields</h3><div class="config-instructions mt-3">${target.lineFields.map(info=>`<label class="form-check"><input class="form-check-input" type="checkbox" data-required="${info.key}" data-required-group="line" ${draft.encoding_rules.line_required_fields.includes(info.key)?'checked':''} ${info.required?'disabled':''}><span class="form-check-label">Require line ${esc(info.label.toLowerCase())} <code>${esc(info.key)}</code></span></label>`).join('')}</div>`:'';
-    return card('3. Encoding and review rules',`<div class="finance-card-body"><p class="text-600">Configure normalization and review behavior for future data entry. These settings do not encode or import accounting records in this preview.</p><div class="finance-form-grid">${field('encoding_rules.date_format','Source date format',draft.encoding_rules.date_format,{choices:['YYYY-MM-DD','DD/MM/YYYY','MM/DD/YYYY']})}${field('encoding_rules.default_currency','Default currency',draft.encoding_rules.default_currency,{maxlength:3,hint:'Three-letter uppercase currency code, e.g. PHP.'})}${field('encoding_rules.decimal_separator','Decimal separator',draft.encoding_rules.decimal_separator,{choices:[['.','Period · 1,234.56'],[',','Comma · 1.234,56']]})}${field('encoding_rules.thousands_separator','Thousands separator',draft.encoding_rules.thousands_separator,{choices:[['','None'],[',','Comma'],['.','Period'],[' ','Space']]})}${field('encoding_rules.duplicate_policy','When a reference already exists',draft.encoding_rules.duplicate_policy,{choices:[['review','Ask the user to review'],['skip','Skip duplicate records'],['update_existing','Propose updates for user review']]})}${field('encoding_rules.missing_value_policy','When required information is missing','review',{choices:[['review','Hold for user review']]})}</div>${target.fields.filter(info=>info.type==='lookup').map(info=>`<div class="mt-3">${field('relation_lookups.'+info.key+'.match_field',info.label+' lookup field',draft.relation_lookups[info.key]?.match_field || partyKey+'_code',{choices:[[partyKey+'_code',config.party+' code'],['tax_identification_no','Tax identification no.'],[partyKey+'_name',config.party+' name']],hint:'Unknown or ambiguous matches are held for review; this does not create accounts.'})}</div>`).join('')}${choices}${lineChoices}<div class="finance-callout mt-4 mb-0">Account identifiers must resolve to an existing ${config.party.toLowerCase()} using your selected lookup field. Unknown accounts, ambiguous dates, and missing required values are held for review. The assistant cannot submit configurations or create accounting records.</div></div>`);
+    return card('3. Encoding and review rules',`<div class="finance-card-body"><p class="text-600">Configure normalization and validation for extracted records. Document duplicates always require review; database imports can skip existing source rows.</p><div class="finance-form-grid">${field('encoding_rules.date_format','Source date format',draft.encoding_rules.date_format,{choices:['YYYY-MM-DD','DD/MM/YYYY','MM/DD/YYYY']})}${field('encoding_rules.default_currency','Default currency',draft.encoding_rules.default_currency,{maxlength:3,hint:'Three-letter uppercase currency code, e.g. PHP.'})}${field('encoding_rules.decimal_separator','Decimal separator',draft.encoding_rules.decimal_separator,{choices:[['.','Period · 1,234.56'],[',','Comma · 1.234,56']]})}${field('encoding_rules.thousands_separator','Thousands separator',draft.encoding_rules.thousands_separator,{choices:[['','None'],[',','Comma'],['.','Period'],[' ','Space']]})}${field('encoding_rules.duplicate_policy','When a reference already exists',draft.encoding_rules.duplicate_policy,{choices:[['review','Ask the user to review'],['skip','Skip duplicate database rows']]})}${field('encoding_rules.missing_value_policy','When required information is missing','review',{choices:[['review','Hold for user review']]})}</div>${target.fields.filter(info=>info.type==='lookup').map(info=>`<div class="mt-3">${field('relation_lookups.'+info.key+'.match_field',info.label+' lookup field',draft.relation_lookups[info.key]?.match_field || partyKey+'_code',{choices:[[partyKey+'_code',config.party+' code'],['tax_identification_no','Tax identification no.'],[partyKey+'_name',config.party+' name']],hint:'Unknown or ambiguous matches are held for review; this does not create accounts.'})}</div>`).join('')}${choices}${lineChoices}<div class="finance-callout mt-4 mb-0">Account identifiers must resolve to an existing ${config.party.toLowerCase()} using your selected lookup field. Unknown accounts, ambiguous dates, and missing required values are held for review. The assistant cannot submit configurations or create accounting records.</div></div>`);
   }
   function validation() {
     const target=targetFor(draft);const issues=[];
@@ -96,7 +132,7 @@
     if(draft.name.length>160)add('Keep the configuration name within 160 characters.',0);
     if(draft.source_type==='database') {
       const columns=splitColumns(draft.columns);const lineColumns=splitColumns(draft.line_columns);
-      if(!draft.connection.trim())add('Enter a connection reference or choose the sample schema.',0);
+      if(!draft.connection.trim())add('Choose a saved database connection.',0);
       if(!draft.table.trim())add('Enter the header table name.',0);
       if(!columns.length)add('Provide header column names so mappings can be checked.',0);
       const keys=splitColumns(draft.source_keys);
@@ -137,11 +173,11 @@
     const lookups=Object.fromEntries(target.fields.filter(info=>info.type==='lookup').map(info=>[info.key,{match_field:draft.relation_lookups[info.key]?.match_field || `${partyKey}_code`,on_missing:'review'}]));
     const reference={account_scope:scopeLabel(draft),connection:database?draft.connection:'',header_table:database?draft.table:'',line_table:database&&draft.include_lines?draft.line_table:''};
     return {
-      preview_only:true, model:`${config.mode==='ar'?'accounts_receivable':'accounts_payable'}.ExtractionConfiguration`,
+      model:`${config.mode==='ar'?'accounts_receivable':'accounts_payable'}.ExtractionConfiguration`,
       unresolved_references:reference,
-      configuration:{name:draft.name,description:draft.description,target_entity:draft.target_entity,source_type:draft.source_type,[partyKey]:null,
-        database_source:null,source_table:null,line_source_table:null,
-        source_schema_snapshot:{...reference,preview_only:true,header_columns:database?splitColumns(draft.columns):[],line_columns:database&&draft.include_lines?splitColumns(draft.line_columns):[]},
+      configuration:{name:draft.name,description:draft.description,target_entity:draft.target_entity,source_type:draft.source_type,[partyKey]:draft.scope==='module'?null:Number(draft.scope),
+        database_source:database&&draft.database_source?Number(draft.database_source):null,source_table:database&&draft.source_table?Number(draft.source_table):null,line_source_table:database&&draft.line_source_table?Number(draft.line_source_table):null,
+        source_schema_snapshot:{...reference,header_columns:database?splitColumns(draft.columns):[],line_columns:database&&draft.include_lines?splitColumns(draft.line_columns):[]},
         source_key_fields:database?splitColumns(draft.source_keys):[],field_mappings:mappings,
         line_item_mappings:database&&draft.include_lines?normalizedMappings(target.lineFields,draft.line_item_mappings):{},line_join_fields:database&&draft.include_lines?joinPairs(draft.line_joins):[],relation_lookups:lookups,
         document_type:database?'':draft.document_type,extraction_context:database?'':draft.extraction_context,field_instructions:database?{}:draft.field_instructions,line_field_instructions:database?{}:draft.line_field_instructions,line_item_context:database?'':draft.line_item_context,sample_text:database?'':draft.sample_text,
@@ -151,141 +187,201 @@
   }
   function reviewStep() {
     const issues=validation();const output=payload();
-    return card('4. Review your configuration',`<div class="finance-card-body">${issues.length?`<div class="config-validation" role="status"><strong>${issues.length} item${issues.length===1?'':'s'} to complete</strong><ul>${issues.map(issue=>`<li><a href="#" data-goto-step="${issue.step}">${esc(issue.message)}</a></li>`).join('')}</ul></div>`:'<div class="config-submitted">Configuration fields are complete. Review the output below before submitting this preview.</div>'}<dl class="config-review-list"><div><dt>Destination model</dt><dd>${esc(targetFor(draft).model)}</dd></div><div><dt>Source</dt><dd>${sourceLabel(draft.source_type)}</dd></div><div><dt>Scope</dt><dd>${esc(scopeLabel(draft))}</dd></div><div><dt>Required fields</dt><dd>${draft.encoding_rules.required_fields.length} header · ${draft.encoding_rules.line_required_fields.length} line</dd></div></dl><div class="finance-callout mb-0">This checks configuration completeness and names against the columns you supplied. Live schema checks, sample extraction, database ID resolution, and activation require the future backend. Submitting here saves a reviewed snapshot in this tab only.</div></div><details class="config-disclosure" open><summary>Configuration output · exact current draft</summary><pre class="config-json mt-3" id="config-output">${esc(JSON.stringify(output,null,2))}</pre></details>${draft.submitted_snapshot?`<details class="config-disclosure"><summary>Last user-submitted snapshot · revision ${draft.submitted_snapshot.configuration.revision}</summary><pre class="config-json mt-3">${esc(JSON.stringify(draft.submitted_snapshot,null,2))}</pre></details>`:''}`,`<button class="btn btn-falcon-default btn-sm" type="button" data-export>${icon('download')} Export JSON</button>`);
+    return card('4. Review your configuration',`<div class="finance-card-body">${issues.length?`<div class="config-validation" role="status"><strong>${issues.length} item${issues.length===1?'':'s'} to complete</strong><ul>${issues.map(issue=>`<li><a href="#" data-goto-step="${issue.step}">${esc(issue.message)}</a></li>`).join('')}</ul></div>`:'<div class="config-submitted">Configuration fields are complete. Review the output below before submitting.</div>'}<dl class="config-review-list"><div><dt>Destination model</dt><dd>${esc(targetFor(draft).model)}</dd></div><div><dt>Source</dt><dd>${sourceLabel(draft.source_type)}</dd></div><div><dt>Scope</dt><dd>${esc(scopeLabel(draft))}</dd></div><div><dt>Required fields</dt><dd>${draft.encoding_rules.required_fields.length} header · ${draft.encoding_rules.line_required_fields.length} line</dd></div></dl><div class="finance-callout mb-0">This checks configuration completeness and names against the columns you supplied. Submission validates the saved schema, fields, and rules. Only submitted configurations are used for extraction.</div></div><details class="config-disclosure" open><summary>Configuration output · exact current draft</summary><pre class="config-json mt-3" id="config-output">${esc(JSON.stringify(output,null,2))}</pre></details>${draft.submitted_snapshot?`<details class="config-disclosure"><summary>Last user-submitted snapshot · revision ${draft.submitted_snapshot.configuration.revision}</summary><pre class="config-json mt-3">${esc(JSON.stringify(draft.submitted_snapshot,null,2))}</pre></details>`:''}`,`<button class="btn btn-falcon-default btn-sm" type="button" data-export>${icon('download')} Export JSON</button>`);
   }
-  function fingerprint() {
-    const {assistant_messages,assistant_proposal,status,revision,id,submitted_snapshot,submitted_at,...context}=draft;
-    return JSON.stringify(context);
+  function stashSession() {
+    if(draft)sessions.set(`${draft.target_entity}:${draft.source_type}`,{draft,dirty,chatInput,sampleDocument,example,contextInfo,contextFeedback,lastCleared});
+  }
+  async function selectSetup(target,source) {
+    if(chatBusy || contextBusy || resetBusy)return;
+    contextVersion++;
+    stashSession();selectedTarget=target;selectedSource=source;
+    draft=null;dirty=false;chatInput='';chatFeedback='';assistantErrorLog=null;sampleDocument='';example=null;review=null;contextInfo=null;contextFeedback='';lastCleared=null;showAdvanced=false;step=0;
+    if(!target || !source){render();return;}
+    const previous=sessions.get(sessionKey());
+    if(previous){({draft,dirty,chatInput,sampleDocument,example,contextInfo,contextFeedback,lastCleared}=previous);}
+    else draft=schema.blank(catalog.find(item=>item.key===target),source);
+    rememberURL();render();
+    if(!contextInfo)await refreshContext();
+  }
+  async function refreshContext(inspect=false) {
+    if(!draft || chatBusy || contextBusy)return;
+    contextBusy=true;contextFeedback='Refreshing selected requirements and source metadata…';render();
+    try {
+      const result=await api.post('configuration-context',draft.id,{selection:selection(),configuration:payload().configuration,inspect_schema:inspect});
+      contextInfo=result;
+      const current=catalog.findIndex(item=>item.key===selectedTarget);
+      if(current>=0)catalog[current]=result.catalog[0];
+      if(selectedSource==='database'){
+        api.state.sources=result.sources;
+        // Keep pinned snapshots visible until the user explicitly selects a newer table.
+        api.state.tables=[...api.state.tables.filter(table=>!result.tables.some(next=>next.id===table.id)),...result.tables];
+      }
+      contextFeedback=inspect?'Database schema refreshed. Choose a table from the new snapshot to use it.':'Context refreshed. Your answers and conversation are unchanged.';
+      review=null;example=null;
+    } catch(problem){contextFeedback=problem.message;}
+    finally {contextBusy=false;render();}
+  }
+  function selectionPanel() {
+    return `<section class="card config-selection mb-3" aria-label="Choose extraction setup"><div class="finance-card-head"><div><h2>What would you like to configure?</h2><div class="finance-card-subtitle">Choose a record type and extraction source. Each combination has its own chat in this page.</div></div></div><div class="finance-card-body"><fieldset><legend>1. Record type</legend><div class="config-selection-options">${catalog.map(target=>`<button type="button" class="btn btn-falcon-default" data-select-target="${target.key}" aria-pressed="${selectedTarget===target.key}">${esc(targetLabel(target))}</button>`).join('')}</div></fieldset><fieldset class="mt-3"><legend>2. Extraction source</legend><div class="config-selection-options">${[['document','file-alt','Document extraction'],['database','database','Database setup']].map(([key,symbol,label])=>`<button type="button" class="btn btn-falcon-default" data-select-source="${key}" aria-pressed="${selectedSource===key}">${icon(symbol)} ${label}</button>`).join('')}</div></fieldset>${draft?`<div class="config-session-bar"><strong>${esc(targetLabel(targetFor(draft)))} · ${selectedSource==='database'?'Database setup':'Document extraction'}</strong><div class="finance-actions"><button type="button" class="btn btn-falcon-default btn-sm" data-refresh-context>Refresh context</button><button type="button" class="btn btn-falcon-default btn-sm" data-clear-chat>Clear chat</button><button type="button" class="btn btn-outline-danger btn-sm" data-reset-context ${chatBusy || contextBusy?'disabled':''}>Reset context</button>${lastCleared?'<button type="button" class="btn btn-link btn-sm" data-undo-clear>Undo clear</button>':''}</div></div><p class="config-note">Refresh keeps your answers. Clear chat removes only working conversation history. Reset context clears the conversation and all setup answers, including saved context, after confirmation.</p><p class="config-note" role="status">${esc(contextFeedback)}</p>`:''}</div></section>`;
+  }
+  function requirementsPanel() {
+    const target=targetFor(draft);const database=selectedSource==='database';
+    const required=draft.encoding_rules.required_fields;
+    const rows=(fields,line=false)=>fields.map(info=>{
+      const needed=info.required || (line?draft.encoding_rules.line_required_fields:required).includes(info.key);
+      const mapping=(line?draft.line_item_mappings:draft.field_mappings)[info.key];
+      const note=database?(mapping?.source?`Column: ${mapping.source}`:mapping?.default?`Default: ${mapping.default}`:'Not mapped'):(line?draft.line_field_instructions:draft.field_instructions)[info.key] || 'Uses overall instructions';
+      return `<tr><td><strong>${esc(info.label)}</strong><code>${esc(info.key)}</code></td><td>${esc(info.type)}${info.choices?.length?`<small>${esc(info.choices.map(choice=>choice[0]).join(', '))}</small>`:''}</td><td>${needed?'Required':'Optional'}</td><td>${esc(note)}</td></tr>`;
+    }).join('');
+    const sourceChoices=api.state.sources || [];
+    const tables=api.state.tables.filter(table=>String(table.source_id)===String(draft.database_source));
+    const select=(path,label,choices,value)=>`<div><label class="form-label" for="context-${path}">${label}</label><select class="form-select" id="context-${path}" data-path="${path}"><option value="">Choose ${label.toLowerCase()}</option>${choices.map(item=>`<option value="${item.id}" ${String(value)===String(item.id)?'selected':''}>${esc(item.label || item.name)}</option>`).join('')}</select></div>`;
+    return `<section class="card config-requirements mb-3" aria-label="Selected setup requirements"><div class="finance-card-head"><h2>What ${esc(targetLabel(target).toLowerCase())} ${database?'database setup':'document extraction'} needs</h2></div><div class="finance-card-body"><div class="config-parameter-list">${(contextInfo?.parameters || []).map(name=>`<span>${esc(name.replaceAll('_',' '))}</span>`).join('')}</div><p class="config-note">${esc((contextInfo?.features || []).join(' · '))}</p>${database?`<div class="config-scope-fields finance-form-grid">${select('database_source','Database connection',sourceChoices,draft.database_source)}${select('source_table','Header table',tables,draft.source_table)}${target.lineModel?select('line_source_table','Line table',tables,draft.line_source_table):''}</div><button type="button" class="btn btn-falcon-default btn-sm mt-2" data-refresh-schema ${draft.database_source?'':'disabled'}>Refresh database schema</button><p class="config-note">${sourceChoices.length?'Choose a connection and table, then describe how its columns map to the fields below.':'No enabled database connections. Add one in Database connections, then refresh context.'}</p><details><summary>Available source columns</summary><p>Header: ${esc(draft.columns || 'Select a header table')}</p>${target.lineModel?`<p>Lines: ${esc(draft.line_columns || 'Select a line table')}</p>`:''}</details>`:''}<p class="config-note"><strong>Required fields:</strong> ${esc(target.fields.filter(info=>info.required || required.includes(info.key)).map(info=>info.label).join(', ') || 'No additional required fields')}</p><details class="config-field-reference"><summary>Destination fields, types and current guidance (${target.fields.length}${target.lineFields.length?` + ${target.lineFields.length} line fields`:''})</summary><div class="table-responsive"><table class="table finance-table"><thead><tr><th>Field</th><th>Type / choices</th><th>Requirement</th><th>${database?'Mapping':'Guidance'}</th></tr></thead><tbody>${rows(target.fields)}</tbody></table></div>${target.lineModel?`<h3>Line item fields</h3><div class="table-responsive"><table class="table finance-table"><thead><tr><th>Field</th><th>Type / choices</th><th>Requirement</th><th>${database?'Mapping':'Guidance'}</th></tr></thead><tbody>${rows(target.lineFields,true)}</tbody></table></div>`:''}</details></div></section>`;
+  }
+  function clearContext() {
+    if(chatBusy || contextBusy || resetBusy)return;
+    contextVersion++;
+    lastCleared={draft:structuredClone(draft),dirty,chatInput,sampleDocument,example};
+    draft.assistant_messages=[];
+    chatInput='';chatFeedback='';assistantErrorLog=null;sampleDocument='';edited();render();
+    notify('Chat cleared. Your configuration answers are preserved.');
+  }
+  function resetDialog() {
+    return `<dialog class="config-submit" id="configuration-reset" aria-labelledby="configuration-reset-title" aria-describedby="configuration-reset-description"><h2 id="configuration-reset-title">Reset this chat’s context?</h2><p id="configuration-reset-description">Start fresh for <strong>${esc(targetLabel(targetFor(draft)))}</strong> · ${draft.source_type==='database'?'Database setup':'Document extraction'}. This clears the conversation and all working answers, including the name, business context, account scope, selected tables, mappings, instructions, custom rules, and example text.</p><p>${draft.id===null?'This unsaved setup will return to its defaults. No configuration will be created.':'The reset is saved immediately and survives a reload. This configuration will return to draft and will not be used for extraction until you review and confirm it again.'}</p><p class="config-note">The record type and extraction source stay selected. Other chats, accounting records, database connections, and audit history are kept. Previous audit snapshots are not sent to the assistant.</p><div id="config-reset-error" class="config-feedback" role="alert"></div><div class="finance-actions justify-content-end"><button type="button" class="btn btn-falcon-default" data-cancel-reset autofocus>Keep context</button><button type="button" class="btn btn-danger" data-confirm-reset>Reset context</button></div></dialog>`;
+  }
+  async function resetContext() {
+    if(chatBusy || contextBusy || resetBusy)return;
+    const dialog=root.querySelector('#configuration-reset');
+    resetBusy=true;contextVersion++;
+    dialog.querySelectorAll('button').forEach(button=>{button.disabled=true;});
+    dialog.querySelector('[data-confirm-reset]').textContent='Resetting…';
+    dialog.querySelector('#config-reset-error').textContent='';
+    dialog.setAttribute('aria-busy','true');
+    try {
+      const result=await api.post('configuration-reset-context',draft.id,{selection:selection(),revision:draft.revision,confirmed:true});
+      draft={...schema.blank(targetFor(result.record),result.record.source_type),...result.record};
+      dirty=false;chatInput='';chatFeedback='Context reset. Tell me what you want to configure.';
+      assistantErrorLog=null;sampleDocument='';example=null;review=null;lastCleared=null;
+      contextFeedback='Context reset. Previous answers and conversation have been cleared.';
+      showAdvanced=false;step=0;state.pending=null;
+      if(draft.id!==null)state.profiles=state.profiles.map(row=>row.id===draft.id?draft:row);
+      stashSession();rememberURL();dialog.close();render();
+      root.querySelector('#config-chat-input').focus();
+      notify('Context reset. The assistant will start fresh for this selection.');
+    } catch(problem) {
+      dialog.querySelector('#config-reset-error').textContent=problem.message;
+      dialog.querySelectorAll('button').forEach(button=>{button.disabled=false;});
+      dialog.querySelector('[data-confirm-reset]').textContent='Reset context';
+      dialog.removeAttribute('aria-busy');
+    } finally {resetBusy=false;}
   }
   function assistant() {
-    const mapped=Object.values(draft.field_mappings).filter(value=>value.source || value.default).length;
     const messages=draft.assistant_messages;
-    const proposal=draft.assistant_proposal;
-    const proposalMarkup=proposal?`<section class="config-proposal" aria-label="Assistant proposed changes"><div class="config-proposal-head"><strong>Proposed changes</strong><div class="config-note mt-1">Choose what to apply. Replacements of existing input start unchecked.</div></div><div class="config-proposal-changes">${proposal.changes.map((change,index)=>`<div class="config-proposal-row"><input class="form-check-input" type="checkbox" id="proposal-${index}" data-proposal-index="${index}" ${change.selected?'checked':''}><label for="proposal-${index}"><strong>${esc(change.label)}</strong>${change.before?`<span class="proposal-before">Current: ${esc(change.before)}</span>`:'<span class="text-600 d-block mt-1">Currently empty</span>'}<span class="proposal-after">Proposed: ${esc(change.after)}</span></label></div>`).join('')}</div><div class="config-proposal-footer"><button class="btn btn-primary btn-sm" type="button" data-apply-proposal>Apply selected to draft</button><button class="btn btn-link btn-sm" type="button" data-dismiss-proposal>Dismiss</button></div></section>`:'';
-    return `<aside class="config-assistant"><section class="card"><div class="finance-card-head"><div><h2>${icon('magic')} Configuration assistant</h2><div class="finance-card-subtitle">Chat → proposed output → your review</div></div><span class="badge badge-subtle-secondary">Preview</span></div><div class="config-context">Uses your current ${esc(targetFor(draft).label.toLowerCase())} draft: ${mapped} mapped fields, ${draft.extraction_context.length} context characters, business notes, example text, rules, and conversation history.<br><strong>Local demo suggestions · No LLM is connected.</strong></div><div class="config-chat-log" id="config-chat-log" role="log" aria-live="polite">${messages.length?messages.map(message=>`<div class="config-chat-message ${message.role==='user'?'user':''}"><small>${message.role==='user'?'You':'Assistant preview'}</small>${esc(message.content)}${message.llm_log_no?`<a class="d-block mt-2" href="${activity.detailURL(message.llm_log_no)}">View attempt #${message.llm_log_no}</a>`:''}</div>`).join(''):'<div class="config-chat-message"><small>Assistant preview</small>Describe how your data is organized. I can propose mappings, extraction instructions, dates, and currency rules. I will preserve your existing inputs and show changes for you to accept.</div>'}</div><a class="llm-history-link" href="${draft.id===null?config.routes['llm-logs']:activity.configurationURL(draft.id)}">View ${draft.id===null?'all LLM activity':'this configuration’s attempt history'}</a><div class="config-chat-prompts">${(draft.source_type==='database'?['Suggest unmapped fields','Use PHP and DD/MM/YYYY','Explain review gaps']:['Draft extraction context','Use PHP and DD/MM/YYYY','Explain review gaps']).map(prompt=>`<button class="btn btn-falcon-default btn-sm" type="button" data-chat-prompt="${prompt}">${prompt}</button>`).join('')}</div>${proposalMarkup}<form id="config-chat-form" class="config-chat-controls"><label class="visually-hidden" for="config-chat-input">Message the configuration assistant</label><textarea id="config-chat-input" class="form-control mb-2" rows="3" maxlength="4000" placeholder="e.g. Map invoice_reference_no to invoice_no. Keep my current notes.">${esc(chatInput)}</textarea><div class="config-feedback" role="status">${esc(chatFeedback)}</div><button class="btn btn-primary w-100" type="submit">${icon('paper-plane')} Send message</button><p class="config-note mb-0">Suggestions never submit, activate, or import anything. Final submission is a separate user action.</p></form></section></aside>`;
+    return `<section class="config-assistant card" aria-label="Configuration conversation"><div class="finance-card-head"><div><h2>${icon('comments')} Let’s build your extraction setup</h2><div class="finance-card-subtitle">${esc(targetLabel(targetFor(draft)))} · ${draft.source_type==='database'?'Database setup':'Document extraction'}</div></div><span class="finance-status info">${esc(config.mode.toUpperCase())} assistant</span></div><div class="config-chat-log" id="config-chat-log" role="log" aria-live="polite" aria-busy="${chatBusy}">${messages.length?messages.map(message=>`<div class="config-chat-message ${message.role==='user'?'user':''}"><small>${message.role==='user'?'You':'Configuration assistant'}</small>${esc(message.content)}</div>`).join(''):`<div class="config-chat-message"><small>Configuration assistant</small>Let’s configure ${esc(targetLabel(targetFor(draft)).toLowerCase())} using ${draft.source_type==='database'?'your database':'documents'}.<br><br>Tell me about ${draft.source_type==='database'?'the connection, tables and column mappings':'the document layout, field labels and formatting'}, and any special rules. I’ll build the configuration and keep the guide beside this conversation up to date.<br><br>You can also ask me to explain a field or help choose a rule.</div>`}${chatBusy?'<div class="config-chat-message" role="status">Thinking through your setup…</div>':''}</div><div class="config-chat-prompts">${[`Help me configure ${targetLabel(targetFor(draft)).toLowerCase()}`,draft.source_type==='database'?'Which tables and columns do I need?':'Which document fields do I need?','What information is still missing?'].map(prompt=>`<button class="btn btn-falcon-default btn-sm" type="button" data-chat-prompt="${prompt}" ${chatBusy?'disabled':''}>${prompt}</button>`).join('')}</div><form id="config-chat-form" class="config-chat-controls"><label for="config-chat-input" class="form-label">Your message</label><textarea id="config-chat-input" class="form-control" rows="3" maxlength="4000" ${chatBusy?'disabled':''} placeholder="e.g. We receive supplier invoices as PDFs. Dates are DD/MM/YYYY and amounts are in PHP.">${esc(chatInput)}</textarea><div class="config-feedback" role="status">${esc(chatFeedback)}${assistantErrorLog?`<a href="${esc(activity.detailURL(assistantErrorLog))}">View attempt #${esc(assistantErrorLog)}</a>`:''}</div><div class="config-composer-footer"><span class="config-note">Nothing is saved until you review and confirm. Assistant attempts are logged.</span><button class="btn btn-primary" type="submit" ${chatBusy?'disabled':''}>${icon('paper-plane')} ${chatBusy?'Thinking…':'Send message'}</button></div></form></section>`;
   }
-  function renderAssistant() {
-    const old=root.querySelector('.config-assistant');if(old)old.outerHTML=assistant();bindAssistant();
-  }
-  function propose(message) {
-    assignId(draft); rememberURL();
-    const started = performance.now();
-    const original = structuredClone(payload().configuration);
-    const request = {message, conversation:structuredClone(draft.assistant_messages)};
-    const target=targetFor(draft);const changes=[];let unmatched=[];
-    const add=(path,title,value)=>{const before=get(draft,path);if(!same(before,value)&&!changes.some(change=>change.path===path))changes.push({path,label:title,before:structuredClone(before),after:value,selected:before==='' || before===null});};
-    const currency=message.match(/(?:currency|use|in|set(?:\s+to)?)\s+([A-Z]{3})\b/i);
-    if(currency)add('encoding_rules.default_currency','Default currency',currency[1].toUpperCase());
-    const requestedDate=message.match(/YYYY-MM-DD|DD\/MM\/YYYY|MM\/DD\/YYYY/i);
-    if(requestedDate)add('encoding_rules.date_format','Source date format',requestedDate[0].toUpperCase());
-    const explain=/explain|review gaps|what.*missing/i.test(message);
-    if(!explain&&draft.source_type==='database') {
-      const explicit=[...message.matchAll(/(?:map\s+)?([a-z][a-z0-9_]+)\s*(?:to|=)\s*([a-z][a-z0-9_]+)/gi)];
-      for(const [,destination,column] of explicit) {
-        const info=target.fields.find(fieldInfo=>fieldInfo.key===destination);
-        if(info&&splitColumns(draft.columns).includes(column))add(`field_mappings.${destination}.source`,`${info.label} source column`,column);
-        else if(info)unmatched.push(column);
-      }
-      if(/suggest|unmapped|mapping|map fields|map.*column/i.test(message)) {
-        const required=target.fields.filter(info=>draft.encoding_rules.required_fields.includes(info.key)).map(info=>({info,line:false}));
-        const requiredLines=draft.include_lines?target.lineFields.filter(info=>draft.encoding_rules.line_required_fields.includes(info.key)).map(info=>({info,line:true})):[];
-        const remaining=[...target.fields.filter(info=>!draft.encoding_rules.required_fields.includes(info.key)).map(info=>({info,line:false})),...(draft.include_lines?target.lineFields.filter(info=>!draft.encoding_rules.line_required_fields.includes(info.key)).map(info=>({info,line:true})):[])];
-        for(const {info,line} of [...required,...requiredLines,...remaining]) {
-          const path=`${line?'line_item_mappings':'field_mappings'}.${info.key}.source`;
-          const current=get(draft,`${line?'line_item_mappings':'field_mappings'}.${info.key}`);
-          if(current?.source || String(current?.default ?? '')!=='')continue;
-          const columns=splitColumns(line?draft.line_columns:draft.columns);
-          const column=columns.find(value=>value===schema.sourceColumn(info)) || columns.find(value=>value===info.key);
-          if(column)add(path,`${line?'Line · ':''}${info.label} source column`,column);
-          if(changes.length>=20)break;
-        }
-      }
-    }
-    if(!explain&&draft.source_type==='document'&&!currency&&!requestedDate) {
-      const template=/draft|suggest|context|instructions/i.test(message)?`Extract ${target.label.toLowerCase()} from the labeled header and totals. Preserve identifiers exactly. Use the configured date and number formats. Resolve ${config.party.toLowerCase()} identifiers using the configured account lookup rules. Leave ambiguous or missing required values for user review.${draft.description.trim()?' Business context: '+draft.description.trim():''}${draft.sample_text.trim()?' Treat the supplied example as a layout reference; do not reuse its values for another document.':''}`:`Additional user guidance: ${message}`;
-      if(!draft.extraction_context.includes(template))add('extraction_context','Overall extraction context',draft.extraction_context.trim()?draft.extraction_context.trim()+'\n\n'+template:template);
-      if(target.lineModel&&!draft.line_item_context.trim())add('line_item_context','Line item instructions','Read one item per row; preserve item code, unit, and stated quantities. Do not treat subtotal, discount, or tax summary rows as items. Keep accepted and rejected delivery quantities separate and flag ambiguous rows.');
-      const reference=schema.referenceField(target);
-      if(reference&&!draft.field_instructions[reference.key])add(`field_instructions.${reference.key}`,`${reference.label} guidance`,`Read the labeled ${reference.label.toLowerCase()}. Preserve punctuation and leading zeros. Do not substitute another document's reference.`);
-    }
-    const issues=validation();
-    const kept=Object.values(draft.field_mappings).filter(value=>value.source).length;
-    let response=explain?issues.length?`Your draft has ${issues.length} review item(s):\n${issues.map(issue=>'• '+issue.message).join('\n')}\nI have not changed your inputs.`:'Your configuration fields are complete. Review the output yourself before submitting the preview. No live schema or extraction check has run.':changes.length?`I considered your current business notes, ${kept} existing mappings, extraction instructions, example text, rules, and conversation. I prepared ${changes.length} proposed change(s). Existing values are kept unless you explicitly select a replacement. Review and apply the changes below; this does not submit the configuration.`:'I kept your current inputs. No supported change was found. For database mappings, provide column names and try “Suggest unmapped fields” or “Map invoice_reference_no to invoice_no”. For document instructions, describe what should be read. This is a local preview, not a live LLM.';
-    if(unmatched.length)response+=`\nThese requested columns are not in your provided schema: ${unmatched.join(', ')}. Add them to the schema if correct, then ask again.`;
-    const run=activity.append({configuration:draft.id,configuration_revision:draft.revision,target_entity:draft.target_entity,source_type:draft.source_type,purpose:'configuration',provider:null,model_name:null,status:'completed',configuration_snapshot:original,request_payload:request,response_payload:{message:response,changes:structuredClone(changes)},markdown_text:response,input_tokens:null,output_tokens:null,processing_time_ms:Math.max(0,Math.round(performance.now()-started)),error_message:null,fk_document_no:null,source_llm_log:null,preview_reference:{record_label:draft.name || 'Untitled configuration',source_name:draft.source_type==='document'?draft.document_type:draft.table}});
-    const proposal=changes.length?{baseContext:fingerprint(),changes,created_at:new Date().toISOString(),llm_log_no:run.llm_log_no}:null;
-    draft.assistant_messages.push({role:'user',content:message},{role:'assistant',content:response,llm_log_no:run.llm_log_no});
-    draft.assistant_proposal=proposal;persist();
+  async function propose(message) {
+    assistantErrorLog=null;
+    try {
+      const result=await api.post('configuration-chat',draft.id,{configuration:payload().configuration,selection:selection(),messages:draft.assistant_messages,message});
+      const defaults=schema.blank(targetFor(result.record),result.record.source_type);
+      draft={...defaults,...result.record,encoding_rules:{...defaults.encoding_rules,...result.record.encoding_rules}};
+      if(selectedSource==='database'){api.state.sources=result.sources;api.state.tables=result.tables;}
+      edited();return true;
+    } catch(problem){chatFeedback=problem.message;assistantErrorLog=problem.llmLogNo || null;return false;}
   }
   function bindAssistant() {
     const form=root.querySelector('#config-chat-form');
     form.querySelector('textarea').addEventListener('input',event=>{chatInput=event.target.value;});
-    const send=message=>{if(!message.trim()){chatFeedback='Write a message or choose a suggested prompt.';renderAssistant();return;}chatInput='';chatFeedback='';propose(message.trim());renderAssistant();};
+    const send=async message=>{
+      if(chatBusy)return;
+      if(!message.trim()){chatFeedback='Write a message or choose a suggested prompt.';render();return;}
+      chatBusy=true;chatFeedback='';render();
+      const success=await propose(message.trim());
+      chatBusy=false;chatInput=success?'':message;render();
+      root.querySelector('#config-chat-input').focus();
+      const log=root.querySelector('#config-chat-log');log.scrollTop=log.scrollHeight;
+    };
     form.addEventListener('submit',event=>{event.preventDefault();send(chatInput);});
     root.querySelectorAll('[data-chat-prompt]').forEach(button=>button.addEventListener('click',()=>send(button.dataset.chatPrompt)));
-    root.querySelectorAll('[data-proposal-index]').forEach(input=>input.addEventListener('change',()=>{draft.assistant_proposal.changes[Number(input.dataset.proposalIndex)].selected=input.checked;persist();}));
-    root.querySelector('[data-dismiss-proposal]')?.addEventListener('click',()=>{activity.review(draft.assistant_proposal.llm_log_no,{disposition:'dismissed',decided_at:new Date().toISOString()});draft.assistant_proposal=null;persist();renderAssistant();});
-    root.querySelector('[data-apply-proposal]')?.addEventListener('click',()=>{
-      const proposal=draft.assistant_proposal;
-      if(proposal.baseContext!==fingerprint()){chatFeedback='Your inputs changed after this proposal. Ask again so new suggestions use your latest draft.';renderAssistant();return;}
-      const selected=proposal.changes.filter(change=>change.selected);
-      if(!selected.length){chatFeedback='Select at least one proposed change to apply.';renderAssistant();return;}
-      selected.forEach(change=>set(draft,change.path,change.after));
-      activity.review(proposal.llm_log_no,{disposition:'applied to draft',applied_paths:selected.map(change=>change.path),decided_at:new Date().toISOString()});
-      draft.assistant_messages.push({role:'assistant',content:`Applied ${selected.length} selected change(s) to your draft. All other inputs remain as you left them. Review and submit the configuration yourself when ready.`});
-      draft.assistant_proposal=null;edited();chatFeedback='';render();notify('Selected suggestions applied to draft. Not submitted.');
-    });
+  }
+  function guide() {
+    const target=targetFor(draft);const issues=validation();
+    const entry=(label,value)=>`<div><dt>${esc(label)}</dt><dd>${esc(value || 'Not provided yet')}</dd></div>`;
+    const fields=(items)=>Object.entries(items).map(([key,value])=>`${key}: ${typeof value==='object'?JSON.stringify(value):value}`).join('\n');
+    return `<aside class="config-guide card" id="configuration-guide" tabindex="-1" aria-label="Configuration guide"><div class="finance-card-head"><div><h2>${icon('clipboard-check')} What I’ve understood</h2><div class="finance-card-subtitle">Your working configuration · ${dirty?'unsaved changes':draft.id?'saved':'not saved'}</div></div></div><div class="finance-card-body"><dl class="config-guide-list">${entry('Configuration name',draft.name)}${entry('Record type',target.label)}${entry('Source',sourceLabel(draft.source_type))}${entry('Applies to',scopeLabel(draft))}${draft.description?entry('Business context',draft.description):''}${draft.source_type==='database'?`${entry('Database',draft.connection)}${entry('Header table',draft.table)}${entry('Record keys',draft.source_keys)}${target.lineModel?entry('Line table / joins',[draft.line_table,draft.line_joins].filter(Boolean).join(' · ')):''}`:`${entry('Document layout',draft.document_type)}${entry('Extraction instructions',draft.extraction_context)}${target.lineModel?entry('Line item instructions',draft.line_item_context):''}`}<div><dt>Formatting rules</dt><dd>${esc(draft.encoding_rules.default_currency)} · ${esc(draft.encoding_rules.date_format)}<br>Decimal: ${esc(draft.encoding_rules.decimal_separator)} · Thousands: ${esc(draft.encoding_rules.thousands_separator || 'none')}</dd></div>${entry('Duplicate / missing values',`${draft.encoding_rules.duplicate_policy} / ${draft.encoding_rules.missing_value_policy}`)}</dl><details class="config-guide-details"><summary>Fields, mappings & account lookups</summary><pre>${esc(fields(draft.source_type==='database'?draft.field_mappings:draft.field_instructions) || 'No field-specific guidance yet.')}</pre><strong>Line fields</strong><pre>${esc(fields(draft.source_type==='database'?draft.line_item_mappings:draft.line_field_instructions) || 'No line-specific guidance yet.')}</pre><strong>Account lookups</strong><pre>${esc(fields(draft.relation_lookups))}</pre><strong>Required header fields</strong><p>${esc(draft.encoding_rules.required_fields.join(', ') || 'Model requirements only')}</p><strong>Required line fields</strong><p>${esc(draft.encoding_rules.line_required_fields.join(', ') || 'Model requirements only')}</p></details>${issues.length?`<div class="config-validation mt-3"><strong>Still to clarify</strong><ul>${issues.slice(0,6).map(issue=>`<li>${esc(issue.message)}</li>`).join('')}${issues.length>6?`<li>And ${issues.length-6} more — open the detailed review.</li>`:''}</ul></div>`:'<div class="config-submitted mt-3">Ready for your review. Check the details before saving.</div>'}<button class="btn btn-primary w-100" type="button" data-submit-review>Review & save configuration</button><button class="btn btn-link w-100 mt-2" type="button" data-save-draft>Review & save as draft</button></div></aside>`;
+  }
+  function samplePanel() {
+    if(draft.source_type!=='document')return '';
+    return `<details class="card config-sample mt-3" ${example?'open':''}><summary>Try one document <span>Preview the extraction format before saving</span></summary><div class="finance-card-body"><label class="form-label" for="config-sample-document">Use an existing extracted document</label><select id="config-sample-document" class="form-select mb-3"><option value="">Use the example text below</option>${(api.state.sample_documents || []).map(doc=>`<option value="${doc.pk}" ${String(doc.pk)===sampleDocument?'selected':''}>${esc(doc.fk_document_no__file_name)} · extraction #${doc.pk}</option>`).join('')}</select><label class="form-label" for="config-sample-text">Example document text</label><textarea id="config-sample-text" rows="4" class="form-control" placeholder="Paste the text of one document">${esc(draft.sample_text)}</textarea><button type="button" class="btn btn-falcon-default mt-3" data-preview-document>Preview one document</button><p class="config-note">Uses your current instructions. This preview does not create an accounting record.</p>${example?`<div data-sample-output><div class="config-validation">Sample output — check values and issues before relying on this setup.</div><pre class="config-json">${esc(JSON.stringify(example.preview,null,2))}</pre><a href="${esc(activity.detailURL(example.llm_log_no))}">View preview attempt</a></div>`:''}</div></details>`;
   }
   function submissionDialog() {
-    return `<dialog class="config-submit" id="configuration-submit" aria-labelledby="configuration-submit-title"><form method="dialog" id="configuration-submit-form"><h2 id="configuration-submit-title">Submit this configuration?</h2><p>Submit <strong>${esc(draft.name)}</strong>, revision ${draft.revision}, for ${esc(targetFor(draft).label.toLowerCase())} using ${sourceLabel(draft.source_type).toLowerCase()}.</p><div class="finance-callout">This is a frontend preview. Your reviewed snapshot is saved in this browser tab. It is not sent to a server or activated for extraction. Unapplied assistant suggestions are not applied.</div><label class="form-check mb-3"><input class="form-check-input" type="checkbox" id="config-review-confirmation" required><span class="form-check-label">I reviewed the source, fields, instructions, and rules and want to submit this preview.</span></label><div class="finance-actions justify-content-end"><button class="btn btn-falcon-default" value="cancel" type="button" data-cancel-submit>Keep editing</button><button class="btn btn-primary" id="config-confirm-submit" type="submit" disabled>${icon('check')} Confirm submission</button></div></form></dialog>`;
+    return `<dialog class="config-submit" id="configuration-submit" aria-labelledby="configuration-submit-title"><form id="configuration-submit-form"><h2 id="configuration-submit-title">Is everything correct?</h2><p>Review <strong>${esc(draft.name)}</strong> for ${esc(targetFor(draft).label.toLowerCase())}. ${review?.submit?'Confirming saves and activates this setup for extraction.':'Confirming saves a draft for later; it is not active for extraction.'}</p><dl class="config-guide-list config-confirm-summary mb-3">${[
+      ['Source',draft.source_type==='database'?`${draft.connection} · ${draft.table}`:draft.document_type],
+      ['Account scope',scopeLabel(draft)],
+      ['Instructions',draft.source_type==='database'?`${Object.keys(draft.field_mappings).length} header mappings; keys: ${draft.source_keys}`:draft.extraction_context],
+      ['Line items',draft.source_type==='database'?[draft.line_table,draft.line_joins].filter(Boolean).join(' · '):draft.line_item_context],
+      ['Formatting',`${draft.encoding_rules.default_currency} · ${draft.encoding_rules.date_format}`],
+      ['Review rules',`Duplicates: ${draft.encoding_rules.duplicate_policy}; missing values: ${draft.encoding_rules.missing_value_policy}`],
+    ].filter(([,value])=>value).map(([label,value])=>`<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl><details class="config-guide-details mb-3"><summary>View every configuration field</summary><pre class="config-json">${esc(JSON.stringify(payload().configuration,null,2))}</pre></details><label class="form-check mb-3"><input class="form-check-input" type="checkbox" id="config-review-confirmation" required><span class="form-check-label">The source, fields, instructions, and rules are correct. Save this configuration.</span></label><div id="config-confirm-error" class="config-feedback" role="alert"></div><div class="finance-actions justify-content-end"><button class="btn btn-falcon-default" type="button" data-cancel-submit>Keep editing</button><button class="btn btn-primary" id="config-confirm-submit" type="submit" disabled>Confirm & save${review?.submit?' configuration':' draft'}</button></div></form></dialog>`;
+  }
+  function importControls() {
+    if(draft.source_type!=='database')return '';
+    const history=importRuns.filter(run=>run.configuration_id===draft.id);
+    const historyMarkup=history.map(run=>`<details class="mt-2"><summary>Import #${run.id} · ${esc(run.status)} · ${esc(new Date(run.created_at).toLocaleString())}</summary><pre class="config-json">${esc(JSON.stringify(run.result,null,2))}</pre></details>`).join('');
+    if(draft.status!=='submitted')return historyMarkup?`<section class="card p-3 mb-3"><h2 class="fs-9">Recent imports</h2>${historyMarkup}</section>`:'';
+    return `<section class="card p-3 mb-3"><h2 class="fs-9">Import source records</h2><div class="d-flex gap-2 flex-wrap"><label>Limit <input id="import-limit" type="number" min="1" max="100" value="50" class="form-control"></label><label>Offset <input id="import-offset" type="number" min="0" value="0" class="form-control"></label><button type="button" class="btn btn-primary align-self-end" data-import>Import records</button></div><pre id="import-result" class="mt-3 mb-0" aria-live="polite"></pre>${historyMarkup}</section>`;
   }
   function render() {
-    const target=targetFor(draft);
-    root.innerHTML=`<nav class="finance-breadcrumb" aria-label="Breadcrumb"><a href="${baseURL}">Extraction setup</a>${icon('chevron-right')}<span aria-current="page">${esc(draft.name || 'New configuration')}</span></nav><header class="finance-heading"><div><h1>${draft.id===null?'New configuration':esc(draft.name || 'Untitled configuration')}</h1><p>${esc(target.label)} · ${sourceLabel(draft.source_type)} · Revision ${draft.revision}</p></div><div class="finance-actions"><a class="btn btn-falcon-default config-assistant-jump" href="#config-chat-input">${icon('magic')} Ask assistant</a><span id="config-header-status">${status(draft)}</span><button class="btn btn-falcon-default" type="button" data-save-draft>${icon('save')} Save locally</button></div></header><div class="finance-callout">Guided setup preview. Configuration drafts and chat suggestions stay in this tab. Database queries, document processing, live LLM calls, and server submissions are not connected.</div><div id="config-submission-banner">${draft.status==='submitted'?`<div class="config-submitted">You submitted revision ${draft.revision} locally on ${esc(new Date(draft.submitted_at).toLocaleString())}. Editing a field or applying a suggestion creates a new draft revision and preserves this snapshot.</div>`:draft.submitted_snapshot?'<div class="config-submitted">Editing a new draft revision. The last user-submitted snapshot remains unchanged.</div>':''}</div><div class="config-layout"><div><ol class="config-stepper" aria-label="Configuration steps">${['Record & source',draft.source_type==='database'?'Field mapping':'Instructions','Encoding rules','Review & submit'].map((title,index)=>`<li><button type="button" data-goto-step="${index}" ${step===index?'aria-current="step"':''}>${index+1}. ${title}</button></li>`).join('')}</ol><form class="config-form" id="configuration-main" novalidate><div id="config-error" class="finance-form-error" role="alert" tabindex="-1" hidden></div>${[sourceStep,mappingStep,rulesStep,reviewStep][step]()}</form><div class="finance-form-footer"><div><span class="config-progress">Step ${step+1} of 4</span><span class="config-saved d-block" id="config-save-state">Saved in this tab</span></div><div class="finance-actions">${step?`<button class="btn btn-falcon-default" type="button" data-goto-step="${step-1}">${icon('arrow-left')} Back</button>`:link(baseURL,'All configurations')}${step<3?`<button class="btn btn-primary" type="button" data-goto-step="${step+1}">Continue ${icon('arrow-right')}</button>`:`<button class="btn btn-primary" type="button" data-submit-review ${validation().length || draft.status==='submitted'?'disabled':''}>${icon('check-circle')} ${draft.status==='submitted'?'Submitted · preview':'Review & submit'}</button>`}</div></div></div>${assistant()}</div>${submissionDialog()}`;
+    if(!draft){root.innerHTML=`<header class="finance-heading"><div><h1>Set up extraction</h1><p>Select what you want to configure before starting a conversation.</p></div></header>${selectionPanel()}<div class="finance-callout">Select both a record type and an extraction source to see the required fields and start its chat.</div>`;return;}
+    root.innerHTML=`<nav class="finance-breadcrumb" aria-label="Breadcrumb"><a href="${baseURL}">Extraction setup</a>${icon('chevron-right')}<span aria-current="page">${esc(draft.name || 'New configuration')}</span></nav><header class="finance-heading"><div><h1>${draft.id===null?'Set up extraction with a conversation':esc(draft.name)}</h1><p>Tell us what you need. Build your configuration together, then confirm the details.</p></div><div class="finance-actions"><a class="btn btn-falcon-default config-guide-jump" href="#configuration-guide">View configuration guide</a><span id="config-header-status">${status(draft)}</span></div></header>${selectionPanel()}${requirementsPanel()}<div id="config-error" class="finance-form-error" role="alert" tabindex="-1" hidden></div><div id="config-submission-banner">${draft.submitted_snapshot?'<div class="config-submitted">Your last confirmed setup is preserved. Changes here need a new review and confirmation.</div>':''}</div>${importControls()}<div class="config-layout config-chat-layout"><div>${assistant()}${samplePanel()}<button type="button" class="btn btn-link config-advanced-toggle mt-3" data-toggle-advanced aria-expanded="${showAdvanced}">${icon('sliders-h')} ${showAdvanced?'Hide':'Open'} detailed settings</button>${showAdvanced?`<section class="mt-3"><ol class="config-stepper" aria-label="Configuration steps">${['Record & source',draft.source_type==='database'?'Field mapping':'Instructions','Encoding rules','Detailed review'].map((title,index)=>`<li><button type="button" data-goto-step="${index}" ${step===index?'aria-current="step"':''}>${title}</button></li>`).join('')}</ol><form class="config-form" id="configuration-main" novalidate>${[sourceStep,mappingStep,rulesStep,reviewStep][step]()}</form></section>`:''}</div>${guide()}</div>${submissionDialog()}${resetDialog()}`;
     bindAssistant();
+    root.querySelector('#configuration-reset').addEventListener('cancel',event=>{if(resetBusy)event.preventDefault();});
     const dialog=root.querySelector('#configuration-submit');
     root.querySelector('#config-review-confirmation').addEventListener('change',event=>{root.querySelector('#config-confirm-submit').disabled=!event.target.checked;});
     root.querySelector('[data-cancel-submit]').addEventListener('click',()=>dialog.close());
-    root.querySelector('#configuration-submit-form').addEventListener('submit',event=>{
+    root.querySelector('#configuration-submit-form').addEventListener('submit',async event=>{
       event.preventDefault();
-      if(!root.querySelector('#config-review-confirmation').checked || validation().length)return;
-      const previous=structuredClone(draft);
-      assignId(draft);draft.status='submitted';draft.submitted_at=new Date().toISOString();
-      draft.submitted_snapshot=payload('submitted',draft.submitted_at);
-      draft.submitted_snapshot.configuration.assistant_proposal={};
-      if(!persist()){Object.assign(draft,previous);return;}
-      dialog.close();rememberURL();render();notify('You submitted the preview configuration. No backend action ran.');
+      if(root.querySelector('#config-review-confirmation').checked)await saveDraft();
     });
+    root.querySelector('#config-sample-document')?.addEventListener('change',event=>{sampleDocument=event.target.value;example=null;root.querySelector('[data-sample-output]')?.remove();});
+    root.querySelector('#config-sample-text')?.addEventListener('input',event=>{draft.sample_text=event.target.value;edited();});
+    if(chatBusy || contextBusy)root.querySelectorAll('button,input,select,textarea').forEach(control=>control.disabled=true);
   }
   function inputChange(element) {
     const path=element.dataset.path;
-    if(path==='target_entity'&&element.value!==draft.target_entity) {
-      const next=catalog.find(target=>target.key===element.value);
-      const previousSource=draft.source_type;
-      if(hasContent(draft))assignId(draft);
-      draft=schema.blank(next,previousSource);state.pending=draft;persist();rememberURL();render();return;
+    set(draft,path,element.type==='checkbox'?element.checked:element.value);
+    if(['database_source','source_table','line_source_table'].includes(path)) {
+      if(path==='database_source'){draft.source_table=null;draft.line_source_table=null;draft.source_keys='';draft.line_joins='';draft.field_mappings={};draft.line_item_mappings={};}
+      if(path==='source_table'){draft.source_keys='';draft.line_joins='';draft.field_mappings={};}
+      if(path==='line_source_table'){draft.line_joins='';draft.line_item_mappings={};}
+      const header=api.state.tables.find(table=>String(table.id)===String(draft.source_table));
+      const lines=api.state.tables.find(table=>String(table.id)===String(draft.line_source_table));
+      draft.connection=api.state.sources.find(source=>String(source.id)===String(draft.database_source))?.name || '';
+      draft.table=header?.name || '';draft.columns=(header?.columns || []).join('\n');
+      draft.line_table=lines?.name || '';draft.line_columns=(lines?.columns || []).join('\n');draft.include_lines=Boolean(lines);
+      edited();render();return;
     }
-    set(draft,path,element.type==='checkbox'?element.checked:element.value);edited();
+    edited();
     if(path==='include_lines')render();else refreshIndicators();
   }
   function refreshIndicators() {
     const element=root.querySelector('#config-header-status');if(element)element.innerHTML=status(draft);
-    const context=root.querySelector('.config-context');
-    if(context)context.innerHTML=`Uses your current ${esc(targetFor(draft).label.toLowerCase())} draft: ${Object.values(draft.field_mappings).filter(value=>value.source || value.default).length} mapped fields, ${draft.extraction_context.length} context characters, business notes, example text, rules, and conversation history.<br><strong>Local demo suggestions · No LLM is connected.</strong>`;
-    if(draft.status==='draft'&&draft.submitted_snapshot){const banner=root.querySelector('#config-submission-banner');if(banner)banner.innerHTML='<div class="config-submitted">Editing a new draft revision. The last user-submitted snapshot remains unchanged.</div>';}
+    const current=root.querySelector('.config-guide');if(current)current.outerHTML=guide();
+    const requirements=root.querySelector('.config-requirements');if(requirements)requirements.outerHTML=requirementsPanel();
   }
   function exportJSON() {
     const result=draft.status==='submitted'?draft.submitted_snapshot:payload();
-    const href=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));const anchor=document.createElement('a');anchor.href=href;anchor.download=`${config.mode}-${draft.target_entity}-configuration-r${draft.revision}.json`;anchor.click();URL.revokeObjectURL(href);notify('Configuration JSON exported. No server submission ran.');
+    const href=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));const anchor=document.createElement('a');anchor.href=href;anchor.download=`${config.mode}-${draft.target_entity}-configuration-r${draft.revision}.json`;anchor.click();URL.revokeObjectURL(href);notify('Configuration JSON exported.');
   }
   root.addEventListener('submit',event=>{if(event.target.id==='configuration-main')event.preventDefault();});
   root.addEventListener('input',event=>{
     const element=event.target;
-    if(element.matches('#configuration-main [data-path]')&&element.tagName!=='SELECT'&&element.type!=='checkbox')inputChange(element);
+    if(element.matches('#configuration-main [data-path], .config-scope-fields [data-path]')&&element.tagName!=='SELECT'&&element.type!=='checkbox')inputChange(element);
   });
   root.addEventListener('change',event=>{
     const element=event.target;
-    if(element.matches('#configuration-main [data-path]')&&(element.tagName==='SELECT'||element.type==='checkbox'))inputChange(element);
+    if(element.matches('#configuration-main [data-path], .config-scope-fields [data-path]')&&(element.tagName==='SELECT'||element.type==='checkbox'))inputChange(element);
     if(element.matches('[data-required]')) {
       const name=element.dataset.required;
       const group=element.dataset.requiredGroup==='line'?'line_required_fields':'required_fields';
@@ -295,30 +391,57 @@
   });
   root.addEventListener('click',event=>{
     const action=event.target.closest('button,a');if(!action)return;
-    if(action.hasAttribute('data-goto-step')) {event.preventDefault();step=Number(action.dataset.gotoStep);rememberURL();render();root.querySelector('.config-stepper [aria-current="step"]').focus();}
-    else if(action.hasAttribute('data-source')) {if(draft.source_type!==action.dataset.source){draft.source_type=action.dataset.source;edited();render();}}
-    else if(action.hasAttribute('data-use-sample')) {Object.assign(draft,schema.sample(targetFor(draft)));edited();render();notify('Sample schema loaded. No database connection was made.');}
-    else if(action.hasAttribute('data-save-draft'))saveDraft();
+    if(action.hasAttribute('data-select-target')) {selectSetup(action.dataset.selectTarget,selectedSource);return;}
+    if(action.hasAttribute('data-select-source')) {selectSetup(selectedTarget,action.dataset.selectSource);return;}
+    if(!draft || resetBusy)return;
+    if(action.hasAttribute('data-refresh-context'))refreshContext();
+    else if(action.hasAttribute('data-refresh-schema'))refreshContext(true);
+    else if(action.hasAttribute('data-clear-chat'))clearContext();
+    else if(action.hasAttribute('data-reset-context')) {
+      if(chatBusy || contextBusy)return;
+      contextVersion++;review=null;
+      root.querySelector('#configuration-reset').showModal();
+    }
+    else if(action.hasAttribute('data-cancel-reset'))root.querySelector('#configuration-reset').close();
+    else if(action.hasAttribute('data-confirm-reset'))resetContext();
+    else if(action.hasAttribute('data-undo-clear')&&lastCleared&&!chatBusy&&!contextBusy){contextVersion++;({draft,dirty,chatInput,sampleDocument,example}=lastCleared);lastCleared=null;review=null;render();}
+    else if(action.hasAttribute('data-import')) {
+      const body={revision:draft.revision,request_id:crypto.randomUUID(),limit:Number(root.querySelector('#import-limit').value),offset:Number(root.querySelector('#import-offset').value)};
+      api.post('import',draft.id,body).then(result=>{root.querySelector('#import-result').textContent=JSON.stringify(result,null,2);}).catch(problem=>error(problem.message));
+    }
+    else if(action.hasAttribute('data-goto-step')) {event.preventDefault();step=Number(action.dataset.gotoStep);showAdvanced=true;rememberURL();render();root.querySelector('.config-stepper [aria-current="step"]').focus();}
+
+
+    else if(action.hasAttribute('data-toggle-advanced')) {showAdvanced=!showAdvanced;render();}
+    else if(action.hasAttribute('data-preview-document')) {
+      const version=contextVersion;
+      api.post('configuration-preview',draft.id,{configuration:payload().configuration,text_log_id:sampleDocument || null}).then(result=>{
+        if(version!==contextVersion)return;
+        draft.sample_text=result.sample_text;edited();example=result;render();
+      }).catch(problem=>{if(version===contextVersion)error(problem.message);});
+    }
+    else if(action.hasAttribute('data-save-draft'))requestReview(false);
     else if(action.hasAttribute('data-export'))exportJSON();
-    else if(action.hasAttribute('data-submit-review')) {if(validation().length){step=3;render();return;}root.querySelector('#configuration-submit').showModal();}
+    else if(action.hasAttribute('data-submit-review'))requestReview(true);
   });
   window.addEventListener('finance-llm-storage-error',event=>error(event.detail));
-  document.getElementById('reset-demo').hidden=true;
+
   const previewNote=document.querySelector('.finance-preview-note > span:nth-child(2)');
-  previewNote.textContent='Configuration preview. Drafts, chat history, and reviewed snapshots stay in this browser tab. No imports, provider calls, or server submissions run.';
+  previewNote.textContent='Chat builds an unsaved setup. Review and confirm to save. Assistant attempts are logged.';
+  window.addEventListener('beforeunload',event=>{if(dirty || [...sessions.values()].some(session=>session.dirty && session.draft!==draft)){event.preventDefault();event.returnValue='';}});
   if(config.screen==='list')list();
   else {
     if(config.recordId!==null)draft=state.profiles.find(profile=>profile.id===config.recordId);
     else {
-      const requested=catalog.find(target=>target.key===parameters.get('target')) || catalog[0];
-      if(state.pending&&parameters.get('fresh')!=='1'&&(!parameters.get('target')||state.pending.target_entity===requested.key)&&(!parameters.get('source')||state.pending.source_type===parameters.get('source')))draft=state.pending;
-      else {if(state.pending&&hasContent(state.pending)){assignId(state.pending);}draft=schema.blank(requested,parameters.get('source')==='document'?'document':'database');state.pending=draft;persist();}
+      selectedTarget=catalog.some(target=>target.key===parameters.get('target'))?parameters.get('target'):'';
+      selectedSource=['document','database'].includes(parameters.get('source'))?parameters.get('source'):'';
+      selectSetup(selectedTarget,selectedSource);return;
     }
-    if(!draft){root.innerHTML=`<div class="finance-empty"><h1>Configuration unavailable</h1><p>This local draft may belong to another tab.</p>${link(baseURL,'Back to configurations')}</div>`;return;}
-    if(config.recordId===null)rememberURL();
+    if(!draft){root.innerHTML=`<div class="finance-empty"><h1>Configuration unavailable</h1><p>Reload to see current configurations.</p>${link(baseURL,'Back to configurations')}</div>`;return;}
+    selectedTarget=draft.target_entity;selectedSource=draft.source_type;
     draft.encoding_rules.line_required_fields ||= schema.requiredLineFields(targetFor(draft));
     draft.line_field_instructions ||= {};
     draft.relation_lookups ||= {};
-    render();
+    render();refreshContext();
   }
 })();

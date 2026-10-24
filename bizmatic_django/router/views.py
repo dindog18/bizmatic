@@ -13,7 +13,7 @@ from pydantic import ValidationError as SchemaError
 
 from .models import RoutingDestination, RoutingRule
 from .schemas.routing import ExecutionRequest
-from .services import configuration, execution, pages, records
+from .services import configuration, execution, pages, records, handoff
 from .services.catalog import destination_catalog
 
 
@@ -53,6 +53,7 @@ def workspace(request, screen="queue", record_id=None):
            "configurationEdit": reverse("ROUTER:configuration_edit", args=["destinations", 0]),
            "toggle": reverse("ROUTER:configuration_toggle", args=["destinations", 0]),
            "review": reverse("ROUTER:route_review", args=[0]),
+           "process": reverse("ROUTER:route_process", args=[0]),
            "addRoute": reverse("ROUTER:route_add", args=[0]),
            "accuracy": reverse("ROUTER:log_accuracy", args=[0])}
     return render(request, "router/workspace.html", {
@@ -99,7 +100,18 @@ def configuration_toggle(request, kind, record_id):
 
 @require_POST
 def route_review(request, route_id):
-    return _perform(request, lambda data: {"record": pages.route(records.review(route_id, data))})
+    def review(data):
+        route = records.review(route_id, data)
+        if data.get("decision") == "approved":
+            route = handoff.process(route_id)
+        return {"record": pages.route(route)}
+    return _perform(request, review)
+
+
+@require_POST
+def route_process(request, route_id):
+    return _perform(request, lambda data: {"record": pages.route(handoff.process(
+        route_id, configuration_id=data.get("configuration_id"), revision=data.get("revision")))})
 
 
 @require_POST

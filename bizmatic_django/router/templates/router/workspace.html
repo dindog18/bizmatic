@@ -6,7 +6,7 @@
 {% block breadcrumbs %}<nav aria-label="Breadcrumb"><ol class="breadcrumb fs-10 mb-3"><li class="breadcrumb-item"><a href="{% url 'ROUTER:queue' %}">Router</a></li><li class="breadcrumb-item active" aria-current="page">{{ page_title }}</li></ol></nav>{% endblock %}
 {% block content %}
 <div id="router-app">
-  <div class="alert alert-info mb-4">Routing uses saved extraction text and active rules. Start execution from Documents or Batches. Destination-module processing will be added later.</div>
+  <div class="alert alert-info mb-4">Routing uses saved extraction text and active rules. Start execution from Documents or Batches. Approving a destination starts accounting extraction using a submitted configuration.</div>
   <nav class="router-tabs mb-4" aria-label="Routing workspace">
     <a href="{% url 'ROUTER:queue' %}" data-screen="queue">Routing queue</a>
     <a href="{% url 'ROUTER:destinations' %}" data-screen="destinations">Destinations</a>

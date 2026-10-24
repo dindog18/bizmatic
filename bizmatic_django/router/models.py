@@ -162,6 +162,13 @@ class DocumentRoute(models.Model):
     destination = models.ForeignKey(
         RoutingDestination, on_delete=models.PROTECT, related_name="routes",
     )
+    processing_status = models.CharField(max_length=20, default="pending", choices=[
+        ("pending", "Pending"), ("processing", "Processing"),
+        ("completed", "Completed"), ("failed", "Failed"),
+    ])
+    processing_error = models.TextField(blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+
     reason = models.TextField(blank=True, help_text="Why this document belongs at this destination.")
     confidence = models.DecimalField(
         max_digits=5, decimal_places=4, null=True, blank=True,

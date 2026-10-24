@@ -76,6 +76,13 @@
         ui.render(); ui.notice(`${row.name} ${row.is_active ? "enabled" : "disabled"}.`);
         break;
       }
+      case "process": {
+        const route=ui.state.routes.find(row=>row.id===id);
+        const value=document.getElementById(`route-profile-${id}`).value;
+        const saved=await ui.post(ui.apiURL("process",id), {revision:route.revision, configuration_id:value?Number(value):null});
+        Object.assign(route,saved);ui.render();ui.notice(`Accounting processing: ${route.processing_status}`,route.processing_status==='failed');
+        break;
+      }
       case "add-route": ui.showAddRoute(Number(button.dataset.logId)); break;
       case "close-dialog": document.getElementById("router-dialog").close(); break;
       case "accuracy": {
@@ -106,6 +113,7 @@
       if (form.matches("[data-review-form]")) {
         const route = ui.state.routes.find(row => row.id === Number(form.dataset.routeId));
         const decision = event.submitter?.value || "notes";
+        if(decision === "approved")ui.notice("Saving approval and processing the accounting record…");
         const saved = await ui.post(ui.apiURL("review", route.id), {
           review_notes: String(new FormData(form).get("review_notes")).trim(), decision, revision: route.revision,
         });

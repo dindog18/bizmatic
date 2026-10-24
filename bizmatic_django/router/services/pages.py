@@ -20,9 +20,27 @@ def rule(row):
 
 
 def route(row):
+    from accounts_receivable.services.catalog import TARGETS, model
+    mode = {"accounts_payable": "ap", "accounts_receivable": "ar"}.get(row.destination.module_name)
+    profiles = []
+    record_url = ""
+    history_url = ""
+    if mode:
+        target = next((key for key, name in TARGETS[mode].items() if name == row.destination.target_model), None)
+        base = "/accounts-receivable/" if mode == "ar" else "/accounts-payable/"
+        profiles = list(model(mode, "ExtractionConfiguration").objects.filter(status="submitted", source_type="document", target_entity=target).values("id", "name"))
+        log = model(mode, "LLMExtractionLog").objects.filter(routing_route=row).order_by("-pk").first()
+        if log:
+            history_url = base + f"llm-logs/{log.pk}/"
+            record_id = getattr(log, target+"_id", None)
+            resource = {"customer": "customers", "supplier": "suppliers", "purchase_order": "purchase-orders", "delivery_receipt": "delivery-receipts", "sales_invoice": "invoices", "payment": "payments"}.get(target)
+            if record_id and resource:
+                record_url = base + f"{resource}/{record_id}/"
     return {"id": row.pk, "log_id": row.routing_log_id, "destination_id": row.destination_id,
             "reason": row.reason, "confidence": float(row.confidence) if row.confidence is not None else None,
             "review_status": row.review_status, "review_notes": row.review_notes,
+            "processing_status": row.processing_status, "processing_error": row.processing_error,
+            "profiles": profiles, "record_url": record_url, "history_url": history_url,
             "revision": row.updated_at.isoformat()}
 
 

@@ -1,4 +1,4 @@
-"""Human review of saved routing decisions; no destination-module writes."""
+"""Human review of saved routing decisions; accounting handoff runs after review commits."""
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -29,6 +29,8 @@ def review(route_id, data):
         raise ValidationError("Review notes must be text up to 10,000 characters.")
     if decision != "notes":
         _current_attempt(route.routing_log)
+        if route.processing_status in {"processing", "completed"} and decision != "approved":
+            raise ValidationError("This route has begun accounting processing. Review its accounting record before changing the route.")
         route.review_status = decision
     route.review_notes = notes.strip()
     route.save(update_fields=["review_status", "review_notes", "updated_at"])

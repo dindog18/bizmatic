@@ -41,6 +41,11 @@ LOGGING = {
             "level": os.getenv("DOC_EXTRACTION_LOG_LEVEL", "INFO").upper(),
             "propagate": False,
         },
+        "config_assistant": {
+            "handlers": ["extraction_console"],
+            "level": os.getenv("CONFIG_ASSISTANT_LOG_LEVEL", "INFO").upper(),
+            "propagate": False,
+        },
         "router": {
             "handlers": ["extraction_console"],
             "level": os.getenv("ROUTER_LOG_LEVEL", "INFO").upper(),
@@ -109,6 +114,7 @@ TEMPLATES = [
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.request",
+                "bizmatic_django.onboarding.workspace_guidance",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
             ],

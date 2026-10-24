@@ -162,9 +162,16 @@ for key provisioning, permissions, dependencies, and deployment instructions.
 
 ## Accounting reconciliation MVP
 
+The accounting workspaces at `/accounts-receivable/` and `/accounts-payable/`
+use saved records for accounts, orders, deliveries, invoices, payments,
+reconciliation and aging. Submitted configurations control document extraction
+and bounded PostgreSQL imports. Approving a router destination starts accounting
+extraction. See the [AP/AR backend guide](bizmatic_django/accounts_receivable/README.md)
+for setup, file organization, and MVP limits.
+
 Every AP and AR model inherits directly from Django's `models.Model`, with its
 fields declared in the app's `models.py`. Model comments explain each record's
-purpose. Each app's `services.py` contains plain functions for validation,
+purpose. Each app's `services/reconciliation.py` contains plain functions for validation,
 matching, and settlement; `signals.py` refreshes cases when document membership
 changes. Standard `clean()`, `save()`, and `delete()` hooks call these functions.
 
@@ -185,7 +192,7 @@ payment's available amounts or the invoice total.
 `source_document` links to the uploaded file, and the selected extraction log
 identifies the text used to populate a record. Database provenance uses
 `source_database`, `source_table`, and `source_record_key`; these identify the
-external record and prevent duplicate imports. Database Extraction currently
-stores schema metadata only, so it does not import business rows.
+external record and prevent duplicate imports. Database Extraction stores schema metadata; accounting import services read the
+selected business rows using submitted mappings.
 `RECONCILIATION_PRICE_TOLERANCE` defaults to `0.01` in the transaction currency.
 Quantity differences prevent a complete match.

@@ -11,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'document_extraction/falcon/assets/css/theme.min.css' %}">
   <link rel="stylesheet" href="{% static 'document_extraction/app.css' %}?v=document-review-2">
+  <link rel="stylesheet" href="{% static 'document_extraction/help-tour.css' %}?v=1">
   {% block extra_styles %}{% endblock %}
 </head>
 <body>
@@ -25,6 +26,7 @@
         </div>
         <div class="collapse navbar-collapse" id="navbarVerticalCollapse">
           <div class="navbar-vertical-content scrollbar">
+            <ul class="navbar-nav flex-column mt-3 mb-3"><li class="nav-item"><a class="nav-link {% if section == 'setup' %}active{% endif %}" href="{% url 'setup' %}" {% if section == 'setup' %}aria-current="page"{% endif %}><span class="fas fa-tasks me-2" aria-hidden="true"></span>Application setup {% if setup_missing %}<span class="badge bg-warning text-dark ms-1">{{ setup_missing }} missing</span>{% endif %}</a></li></ul>
             <div class="navbar-vertical-label mt-3 mb-2 px-3">Accounting workspace</div>
             <ul class="navbar-nav flex-column mb-3">
               <li class="nav-item"><a class="nav-link {% if section == 'receivables' %}active{% endif %}" {% if section == 'receivables' %}aria-current="page"{% endif %} href="{% url 'ACCOUNTS_RECEIVABLE:overview' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-arrow-down" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Accounts receivable</span></div></a></li>
@@ -52,10 +54,13 @@
           <button class="btn navbar-toggler-humburger-icon navbar-toggler me-2" type="button" data-bs-toggle="collapse" data-bs-target="#navbarVerticalCollapse" aria-controls="navbarVerticalCollapse" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggle-icon"><span class="toggle-line"></span></span></button>
           <a class="navbar-brand mobile-brand me-auto" href="{% url 'DOC_EXTRACTION:document_list' %}"><span class="font-sans-serif text-primary">bizmatic</span></a>
           <span class="d-none d-xl-inline text-600 fs-10 me-auto">{% block workspace_title %}OCR &amp; document storage{% endblock %}</span>
+          <a class="btn btn-sm btn-outline-primary me-2" href="{% url 'setup' %}">Setup{% if setup_missing %}<span class="badge bg-warning text-dark ms-1">{{ setup_missing }}</span>{% endif %}</a>
+          <button type="button" class="btn btn-sm btn-light" data-help-start aria-haspopup="dialog" aria-controls="help-tour"><span class="fas fa-question-circle me-1" aria-hidden="true"></span>Help<span class="visually-hidden"> on this page</span></button>
         </nav>
         <div id="page-content" tabindex="-1">
           {% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %}" role="status">{{ message }}</div>{% endfor %}
           {% if action_error %}<div class="alert alert-danger" role="alert">{{ action_error }}</div>{% endif %}
+          {% if setup_current.missing %}<div class="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-2" role="status"><div><strong>{{ setup_current.title }} needs setup.</strong> {{ setup_current.missing }} step{{ setup_current.missing|pluralize }} remaining{% if setup_current.key == 'DB_EXTRACTION' %} for database imports{% endif %}.<div class="fs-10">{% for step in setup_current.steps %}{% if not step.ready %}<span class="d-block">{{ step.title }}</span>{% endif %}{% endfor %}</div></div><a class="btn btn-sm btn-warning" href="{% url 'setup' %}#{{ setup_current.key }}">Complete setup</a></div>{% endif %}
           {% block breadcrumbs %}{% endblock %}
           {% block content %}{% endblock %}
         </div>
@@ -63,6 +68,7 @@
       </div>
     </div>
   </main>
+  {% include 'document_extraction/includes/page_help.html' %}
   <script src="{% static 'document_extraction/falcon/vendors/popper/popper.min.js' %}"></script>
   <script src="{% static 'document_extraction/falcon/vendors/bootstrap/bootstrap.min.js' %}"></script>
   <script src="{% static 'document_extraction/falcon/vendors/fontawesome/all.min.js' %}"></script>

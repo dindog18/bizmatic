@@ -1,0 +1,28 @@
+{% extends 'document_extraction/base.html' %}
+{% load static %}
+{% block workspace_title %}Extraction setup · {{ workspace_name }}{% endblock %}
+{% block extra_styles %}
+<link rel="stylesheet" href="{% static 'accounting/workspace.css' %}?v=backend-1">
+<link rel="stylesheet" href="{% static 'accounting/setup/layout.css' %}?v=record-first-2">
+<link rel="stylesheet" href="{% static 'accounting/setup/database.css' %}?v=record-first-2">
+<link rel="stylesheet" href="{% static 'accounting/setup/documents.css' %}?v=record-first-2">
+
+{% endblock %}
+{% block content %}
+<div class="finance-workspace" data-mode="{{ finance_config.mode }}">
+  <nav class="finance-nav" aria-label="{{ workspace_name }} navigation">{% for item in finance_navigation %}<a href="{{ item.url }}" class="{% if item.key == finance_resource %}active{% endif %}" {% if item.key == finance_resource %}aria-current="page"{% endif %}><span class="fas fa-{{ item.icon }}" aria-hidden="true"></span>{{ item.label }}</a>{% endfor %}</nav>
+  <div id="finance-root"><div class="card p-4" role="status">Loading extraction setup…</div></div>
+  <noscript><div class="alert alert-warning">Enable JavaScript to configure extraction.</div></noscript>
+</div>
+{{ finance_config|json_script:'finance-config' }}
+{{ finance_state|json_script:'finance-state' }}
+{% endblock %}
+{% block workspace_footer %}<span>Bizmatic · {{ workspace_name }}</span><span>Record first · Review before saving</span>{% endblock %}
+{% block scripts %}
+<script src="{% static 'accounting/api.js' %}?v=backend-1" defer></script>
+<script src="{% static 'accounting/setup/annotations.js' %}?v=record-first-2" defer></script>
+<script src="{% static 'accounting/setup/query-state.js' %}?v=record-first-2" defer></script>
+<script src="{% static 'accounting/setup/documents.js' %}?v=record-first-2" defer></script>
+<script src="{% static 'accounting/setup/database.js' %}?v=record-first-2" defer></script>
+<script src="{% static 'accounting/setup/workspace.js' %}?v=record-first-2" defer></script>
+{% endblock %}

@@ -2,8 +2,10 @@
 
 Routing reads saved extraction text, evaluates active human-configured rules with
 one LLM, and saves zero, one, or multiple `DocumentRoute` decisions per attempt.
-It does not yet invoke extraction inside AP, AR, or another destination module.
-The exact text for that future step is retained in `route.routing_log.input_text`.
+Approving an AP/AR destination invokes its accounting extraction using a submitted
+configuration. The exact source is retained in `route.routing_log.input_text`.
+`services/handoff.py` saves per-route processing status, errors, and completion;
+completed routes are not processed twice. See the [accounting guide](../accounts_receivable/README.md).
 
 ## Run
 
@@ -34,6 +36,7 @@ starting any calls. Routing does not change the source review or processing stat
 - `services/llm.py`: router settings, prompt, native provider payloads, and response parsing.
 - `services/configuration.py`: configuration writes and revision checks.
 - `services/records.py`: route review, manual destinations, and accuracy feedback.
+- `services/handoff.py`: approval-to-accounting execution and explicit failed retries.
 - `services/pages.py`: database reads and the JSON used by the existing screens.
 - `views.py`, `urls.py`: GET screens and CSRF-protected POST handlers.
 - `static/router/`: configuration, review, and history interactions; no browser fixtures.

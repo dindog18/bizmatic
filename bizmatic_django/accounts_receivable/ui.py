@@ -1,12 +1,10 @@
-"""Shared presentation-only routing for the two accounting workspaces.
-
-No business services or database records are read or changed here. Destination
-field metadata describes configuration forms. The browser owns synthetic preview
-data and session-scoped edits.
-"""
+"""Shared AP/AR navigation and model field descriptions."""
 
 from django.apps import apps
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
+from django.middleware.csrf import get_token
+from .services import pages
+from .services.catalog import model, party_key, RESOURCES as RECORD_RESOURCES, fields as extraction_fields, required_fields
 from django.urls import path, reverse
 
 
@@ -38,7 +36,9 @@ def configuration_catalog(mode):
     def fields(model_name, lines=False):
         result = []
         excluded = {"created_at", "updated_at", "imported_at", "llm_context", "received_items", "proof_of_delivery", "proof_of_payment", "receiving_evidence"}
-        for field in apps.get_model(app, model_name)._meta.fields:
+        target = next(key for key, _, record, line in definitions if model_name in {record, line})
+        mandatory = required_fields(mode, target, lines)
+        for field in extraction_fields(mode, target, lines):
             if field.primary_key or field.name in excluded or field.name.startswith("source_") or field.name.endswith(("_context", "_metadata")):
                 continue
             if lines and field.is_relation:
@@ -46,7 +46,7 @@ def configuration_catalog(mode):
             result.append({
                 "key": field.name, "label": str(field.verbose_name).capitalize(),
                 "type": "lookup" if field.is_relation else field.get_internal_type(),
-                "required": not (field.blank or field.null or field.has_default()),
+                "required": field.name in mandatory,
                 "choices": list(field.flatchoices) if field.choices else [],
             })
         return result
@@ -54,9 +54,9 @@ def configuration_catalog(mode):
     return [{"key": key, "label": label, "model": model, "fields": fields(model), "lineModel": line_model, "lineFields": fields(line_model, True) if line_model else []} for key, label, model, line_model in definitions]
 
 
-def workspace_patterns(view, party_slug):
+def workspace_patterns(view, party_slug, api):
     """Keep AR/AP route names parallel while using customer/supplier URLs."""
-    patterns = [path("", view, name="overview"), path("aging/", view, {"resource": "aging"}, name="aging")]
+    patterns = [path("api/<str:action>/", api, name="api"), path("api/<str:action>/<int:record_id>/", api, name="api_record"), path("", view, name="overview"), path("aging/", view, {"resource": "aging"}, name="aging")]
     for resource, name, _label, _icon in RESOURCES:
         slug = party_slug if resource == "parties" else resource
         patterns.extend([
@@ -96,6 +96,7 @@ def render_workspace(request, mode, resource="overview", screen="list", record_i
         "mode": mode, "title": title, "party": party, "resource": resource,
         "screen": screen, "recordId": record_id,
         "canEncode": resource in EDITABLE_RESOURCES,
+        "api": reverse(f"{namespace}:api", args=["action"]), "csrfToken": get_token(request),
         "routes": {item["key"]: item["url"] for item in navigation},
         "configurationCreate": reverse(f"{namespace}:configuration_create"),
         "sources": {
@@ -106,7 +107,11 @@ def render_workspace(request, mode, resource="overview", screen="list", record_i
     }
     if resource == "configuration":
         config["configurationCatalog"] = configuration_catalog(mode)
-    return render(request, "accounting/workspace.html", {
+    if record_id is not None:
+        target = {"parties": party_key(mode), "reconciliation": "Transaction", "configuration": "ExtractionConfiguration", "llm-logs": "LLMExtractionLog", **RECORD_RESOURCES}[resource]
+        get_object_or_404(model(mode, target), pk=record_id)
+    return render(request, "accounting/setup.html" if screen == "configuration" else "accounting/workspace.html", {
+        "finance_state": pages.workspace_state(mode, resource),
         "page_title": f"{label} · {title}", "section": "receivables" if receivable else "payables",
         "workspace_name": title, "finance_navigation": navigation, "finance_resource": resource,
         "finance_config": config,

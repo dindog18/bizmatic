@@ -4,6 +4,7 @@ from . import views
 
 app_name = "ROUTER"
 urlpatterns = [
+    path("api/routes/<int:route_id>/process/", views.route_process, name="route_process"),
     path("execute/", views.execute, name="execute"),
     path("api/configuration/<str:kind>/", views.configuration_save, name="configuration_save"),
     path("api/configuration/<str:kind>/<int:record_id>/", views.configuration_save, name="configuration_edit"),

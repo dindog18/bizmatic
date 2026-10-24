@@ -73,3 +73,57 @@
 .config-assistant { position:static; } .config-chat-log { max-height:300px; } }
 @media(max-width:767px) { .config-targets { grid-template-columns:repeat(2,minmax(0,1fr)); } .config-target { min-height:96px; } .config-instruction { grid-template-columns:1fr; gap:.4rem; } .config-review-list { grid-template-columns:1fr; } .config-intro { flex-direction:column; } }
 @media(max-width:575px) { .config-source-toggle { flex-direction:column; } .config-source-toggle button { flex:none; } .config-stepper li { min-width:85px; } .config-stepper button { font-size:.65rem; } .config-submit { padding:1rem; } }
+
+/* Conversation leads; the guide remains visible as answers become settings. */
+.config-chat-layout { grid-template-columns:minmax(0,1.65fr) minmax(300px,1fr); }
+.config-chat-layout .config-assistant { position:static; overflow:hidden; }
+.config-chat-layout .config-chat-log { min-height:290px; max-height:510px; padding:1.5rem; font-size:.84rem; }
+.config-chat-layout .config-chat-message { padding:1rem; border-radius:10px; margin-right:1.5rem; }
+.config-chat-layout .config-chat-message.user { margin-left:3rem; margin-right:0; }
+.config-chat-layout .config-chat-controls { padding:0 1.5rem 1.25rem; }
+.config-chat-layout .config-chat-prompts { padding:0 1.5rem 1rem; }
+.config-composer-footer { display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+.config-composer-footer .config-note { max-width:70%; }
+.config-composer-footer button { flex-shrink:0; }
+.config-guide { position:sticky; top:1rem; max-height:calc(100vh - 2rem); overflow:auto; }
+.config-guide-list { margin:0; display:grid; gap:.85rem; }
+.config-guide-list dt { color:#66768a; font-size:.7rem; font-weight:500; }
+.config-guide-list dd { margin:.2rem 0 0; font-size:.8rem; white-space:pre-wrap; overflow-wrap:anywhere; }
+.config-guide-details { margin-top:1rem; font-size:.75rem; }
+.config-guide-details summary { color:var(--finance-accent); cursor:pointer; padding:.5rem 0; }
+.config-guide-details pre { white-space:pre-wrap; overflow-wrap:anywhere; margin-top:.7rem; }
+.config-guide-details p { overflow-wrap:anywhere; }
+.config-sample > summary { padding:1rem 1.25rem; font-size:.8rem; cursor:pointer; font-weight:600; }
+.config-sample > summary span { display:block; font-weight:400; color:#66768a; font-size:.7rem; margin-top:.25rem; }
+.config-chat-layout .config-assistant textarea { min-height:90px; font-size:.84rem; }
+.config-submit { max-width:760px; max-height:90vh; overflow:auto; }
+@media(max-width:1000px) {
+  .config-chat-layout { grid-template-columns:1fr; }
+  .config-guide { position:static; max-height:none; }
+  .config-chat-layout .config-chat-log { min-height:240px; }
+}
+@media(max-width:575px) {
+  .config-chat-layout .config-chat-log { padding:1rem; }
+  .config-chat-layout .config-chat-controls { padding:0 1rem 1rem; }
+  .config-chat-layout .config-chat-prompts { padding:0 1rem 1rem; }
+  .config-composer-footer { flex-direction:column; align-items:stretch; gap:.4rem; }
+  .config-composer-footer .config-note { max-width:none; }
+  .config-chat-layout .config-chat-message.user { margin-left:1rem; }
+}
+.config-guide-jump { display:none; }
+@media(max-width:1000px) { .config-guide-jump { display:inline-flex; } }
+
+.config-selection fieldset { margin:0; padding:0; border:0; }
+.config-selection legend { float:none; width:auto; margin-bottom:.6rem; font-size:.8rem; font-weight:600; }
+.config-selection-options { display:flex; flex-wrap:wrap; gap:.5rem; }
+.config-selection-options [aria-pressed="true"] { color:var(--finance-accent); border-color:var(--finance-accent); background:var(--finance-soft); box-shadow:inset 0 0 0 1px var(--finance-accent); }
+.config-session-bar { margin-top:1rem; padding-top:1rem; border-top:1px solid var(--falcon-border-color); display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; gap:.75rem; font-size:.8rem; }
+.config-parameter-list { display:flex; flex-wrap:wrap; gap:.4rem; }
+.config-parameter-list span { border:1px solid var(--falcon-border-color); border-radius:5px; padding:.25rem .5rem; font-size:.72rem; background:var(--finance-soft); }
+.config-requirements summary { cursor:pointer; font-size:.78rem; color:var(--finance-accent); padding:.5rem 0; }
+.config-requirements p { overflow-wrap:anywhere; white-space:pre-wrap; }
+.config-field-reference table { min-width:540px; font-size:.75rem; }
+.config-field-reference code,.config-field-reference small { display:block; font-size:.68rem; overflow-wrap:anywhere; }
+.config-field-reference td { white-space:normal; max-width:340px; overflow-wrap:anywhere; }
+.config-field-reference h3 { font-size:.85rem; margin:1rem 0 .5rem; }
+@media(max-width:575px) { .config-selection-options .btn { flex:1 1 45%; } .config-session-bar .finance-actions { gap:.5rem; } }

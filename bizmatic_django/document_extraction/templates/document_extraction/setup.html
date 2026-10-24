@@ -1,0 +1,14 @@
+{% extends 'document_extraction/base.html' %}
+{% block workspace_title %}Application setup{% endblock %}
+{% block content %}
+<div class="mb-4"><h1 class="fs-6">Application setup</h1><p class="text-700">Configure the workspaces you plan to use. This checklist updates from your saved settings and configurations.</p></div>
+<div class="alert {% if setup_missing %}alert-warning{% else %}alert-success{% endif %}" role="status"><strong>{% if setup_missing %}{{ setup_missing }} setup step{{ setup_missing|pluralize }} need attention.{% else %}Required setup entries are present.{% endif %}</strong> Database setup is optional. These checks do not call external services or verify that a model is available.</div>
+<div class="card mb-4"><div class="card-body"><h2 class="fs-7">Start with your document workflow</h2><p>Configure the document LLM → upload and review text → create routing destinations and rules → submit AP or AR extraction instructions → route documents → review destinations and approve processing.</p><p class="mb-0 fs-10 text-700">Environment settings are maintained in <code>bizmatic_django/.env</code>, following <code>.env.example</code>. Fill in your selected provider's model and credentials, then restart Django. Each accounting module has its own <code>ACCOUNTS_PAYABLE_*</code> or <code>ACCOUNTS_RECEIVABLE_*</code> settings. API keys are never shown on this page. Open Help on any workspace page for usage instructions.</p></div></div>
+{% for group in setup_groups %}
+<section class="card mb-4" id="{{ group.key }}" style="scroll-margin-top: 5rem" aria-labelledby="heading-{{ group.key }}">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2"><h2 class="fs-7 mb-0" id="heading-{{ group.key }}">{{ group.title }}</h2><span class="badge {% if group.missing %}bg-warning text-dark{% else %}bg-success{% endif %}">{% if group.missing %}{{ group.missing }} step{{ group.missing|pluralize }} remaining{% else %}Setup entries present{% endif %}</span></div>
+  <div class="card-body"><p class="text-700">{{ group.description }}</p>
+    <ul class="list-unstyled mb-0">{% for step in group.steps %}<li class="border-top py-3"><div class="d-flex flex-wrap justify-content-between align-items-start gap-3"><div style="flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere"><div class="mb-2"><span class="badge {% if step.ready %}bg-success{% else %}bg-warning text-dark{% endif %} me-2">{% if step.ready %}Present{% else %}Needs setup{% endif %}</span><strong>{{ step.title }}</strong></div><p class="fs-10 text-700 mb-0">{{ step.detail }}</p></div><a class="btn btn-sm btn-outline-primary" href="{{ step.url }}">{{ step.label }}</a></div></li>{% endfor %}</ul>
+  </div>
+</section>{% endfor %}
+{% endblock %}

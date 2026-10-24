@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Sum
 
 if TYPE_CHECKING:
-    from .models import (
+    from ..models import (
         CompanyPurchaseOrder,
         SupplierDeliveryReceipt,
         SupplierSalesInvoice,
