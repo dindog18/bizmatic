@@ -110,6 +110,21 @@ class WorkspaceTests(TestCase):
         response = self.client.get(url)
         self.assertNotContains(response, "saved-secret")
 
+    @patch("db_extraction.forms.test_connection")
+    def test_edit_test_and_save_reject_redirecting_a_saved_password(self, verify):
+        url = self.path("source_edit", source_id=self.source.pk)
+        for intent, ajax in [("test", False), ("save", False), ("test", True)]:
+            with self.subTest(intent=intent, ajax=ajax):
+                headers = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"} if ajax else {}
+                response = self.client.post(url, {**self.form_data, "name": "Existing",
+                    "host": "other-host", "password": "", "intent": intent}, **headers)
+                self.assertEqual(response.status_code, 400 if ajax else 200)
+                self.assertContains(response, "Enter the password again", status_code=response.status_code)
+                self.assertNotContains(response, "saved-secret", status_code=response.status_code)
+                verify.assert_not_called()
+                self.source.refresh_from_db()
+                self.assertEqual((self.source.host, self.source.password), ("localhost", "saved-secret"))
+
     @patch("db_extraction.services.extraction.inspect_database")
     def test_refresh_saves_ordered_composite_keys_and_browseable_metadata(self, inspect):
         inspect.return_value = catalog()

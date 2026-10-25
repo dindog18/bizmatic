@@ -3,10 +3,13 @@
 import json
 from decimal import Decimal
 
+from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
 from django.utils import timezone
 
 from db_extraction.models import DatabaseSource, DatabaseTable
+from .amounts import line_amount_issues
 from .catalog import model, party_key, RESOURCES, revision
 from .configuration import snapshot
 from .records import allocations, case_membership, matches
@@ -35,9 +38,13 @@ def line(row):
     discount = getattr(row, "discount_amount", Decimal("0"))
     base = quantity * price - discount
     tax = getattr(row, "tax_amount", Decimal("0"))
+    quantity_field = "quantity_ordered" if hasattr(row, "quantity_ordered") else "quantity_invoiced"
+    tolerance = Decimal(str(getattr(settings, "RECONCILIATION_PRICE_TOLERANCE", "0.01")))
+    amount_issues = line_amount_issues(row, quantity_field, tolerance) if hasattr(row, "unit_price") else []
     return {"id": row.pk, "code": row.item_code, "description": row.description, "unit": row.unit_of_measure,
             "quantity": number(quantity), "price": number(price), "discount": number(discount),
             "tax": number(tax), "total": number(getattr(row, "line_total", 0)), "taxRate": number(tax / base * 100) if base else 0,
+            "amountIssues": amount_issues,
             "received": number(getattr(row, "quantity_received", 0)), "accepted": number(getattr(row, "quantity_accepted", 0)), "rejected": number(getattr(row, "quantity_rejected", 0))}
 
 
@@ -110,14 +117,27 @@ def workspace_state(mode, resource):
         state[resource_name] = [document(row, target, mode) for row in rows]
     state["allocations"] = [{"paymentId": row.payment_id, "invoiceId": row.invoice_id, "cash": number(row.cash_amount), "withholding": number(row.withholding_tax_amount), "discount": number(row.discount_amount)} for row in model(mode, "PaymentAllocation").objects.all()]
     indexes = {key: {line["id"]: (row["id"], index) for row in state[key] for index, line in enumerate(row["lines"])} for key in ("purchase-orders", "delivery-receipts", "invoices")}
+    amount_issues = {key: {line["id"]: line["amountIssues"] for row in state[key] for line in row["lines"]}
+                     for key in ("purchase-orders", "invoices")}
     state["reconciliation"] = []
     for row in model(mode, "Transaction").objects.all():
         membership = case_membership(row)
+        calculation_issue = ""
+        try:
+            status, discrepancy = row.calculate_reconciliation()
+        except ValidationError as error:
+            status, discrepancy = "exception", None
+            calculation_issue = "; ".join(error.messages)
         comparisons = []
         for match in row.line_matches.all():
             invoice, invoice_index = indexes["invoices"][match.invoice_line_id]
             order, order_index = indexes["purchase-orders"].get(match.purchase_order_line_id, (None, None))
             receipt, receipt_index = indexes["delivery-receipts"].get(match.delivery_receipt_line_id, (None, None))
-            comparisons.append({"invoiceId": invoice, "invoiceLine": invoice_index, "orderId": order, "orderLine": order_index, "receiptId": receipt, "receiptLine": receipt_index, "quantity": number(match.matched_quantity), "status": match.match_status})
-        state["reconciliation"].append({"id": row.pk, "reference": f"{mode.upper()}-{row.pk}", "partyId": getattr(row, party_key(mode)+"_id"), "date": text_date(row.transaction_date), "currency": row.currency, "notes": row.notes, "status": row.reconciliation_status, "discrepancy": number(row.total_discrepancy_amount), "reconciledAt": text_date(row.reconciled_at), "orderIds": membership["purchase_orders"], "receiptIds": membership["delivery_receipts"], "invoiceIds": membership["sales_invoices"], "matches": comparisons, "revision": revision(row, membership), "matchRevision": revision(row, [membership, matches(row)])})
+            match_status = match.match_status
+            if match_status == "matched" and (amount_issues["invoices"].get(match.invoice_line_id)
+                                               or amount_issues["purchase-orders"].get(match.purchase_order_line_id)):
+                match_status = "exception"
+            comparisons.append({"invoiceId": invoice, "invoiceLine": invoice_index, "orderId": order, "orderLine": order_index, "receiptId": receipt, "receiptLine": receipt_index, "quantity": number(match.matched_quantity), "status": match_status})
+        # Recheck old saved cases on read without rewriting source records or cached decisions.
+        state["reconciliation"].append({"id": row.pk, "reference": f"{mode.upper()}-{row.pk}", "partyId": getattr(row, party_key(mode)+"_id"), "date": text_date(row.transaction_date), "currency": row.currency, "notes": row.notes, "status": status, "discrepancy": number(discrepancy) if discrepancy is not None else None, "calculationIssue": calculation_issue, "reconciledAt": text_date(row.reconciled_at), "orderIds": membership["purchase_orders"], "receiptIds": membership["delivery_receipts"], "invoiceIds": membership["sales_invoices"], "matches": comparisons, "revision": revision(row, membership), "matchRevision": revision(row, [membership, matches(row)])})
     return state

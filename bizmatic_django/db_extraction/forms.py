@@ -9,12 +9,14 @@ from .credentials import credential_cipher
 from .models import DatabaseSource
 from .services.postgres import InspectionError, test_connection
 
+CONNECTION_IDENTITY_FIELDS = ("host", "port", "database_name", "username", "ssl_mode", "ssl_root_cert")
+
 
 class DatabaseSourceForm(forms.ModelForm):
     password = forms.CharField(
         required=False, strip=False,
         widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "new-password"}),
-        help_text="Leave blank to keep the saved password when editing.",
+        help_text="Leave blank to keep the saved password only if the connection and SSL settings are unchanged.",
     )
     clear_password = forms.BooleanField(required=False, label="Clear saved password")
     included_schemas = forms.CharField(
@@ -33,6 +35,8 @@ class DatabaseSourceForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.connection_result: dict[str, Any] | None = None
+        # ModelForm updates its instance after cleaning; retain the original destination.
+        self._saved_connection_identity = {name: getattr(self.instance, name) for name in CONNECTION_IDENTITY_FIELDS}
         if not self.instance.pk:
             self.fields.pop("clear_password", None)
         schemas = self.instance.included_schemas if self.instance.pk else []
@@ -51,7 +55,11 @@ class DatabaseSourceForm(forms.ModelForm):
                 self.add_error("password", "Enter a new password or clear it, not both.")
             cleaned["password"] = ""
         elif not password and self.instance.pk:
-            cleaned["password"] = self.instance.password
+            changed = any(cleaned[name] != value for name, value in self._saved_connection_identity.items() if name in cleaned)
+            if self.instance.password and changed:
+                self.add_error("password", "The connection or SSL settings changed. Enter the password again or choose Clear saved password before testing or saving.")
+            else:
+                cleaned["password"] = self.instance.password
         if not self.errors:
             # Verify exactly the submitted values, never a prior test result.
             candidate = DatabaseSource(**{name: cleaned[name] for name in DatabaseSourceForm.Meta.fields if name != "clear_password"})

@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import llm
+from .amounts import line_amount_issues
 from .catalog import fields, model, party_key, error_text, TARGETS, required_fields
 from .configuration import snapshot, validate
 
@@ -86,6 +87,10 @@ def validate_totals(target, record, lines):
     """Use the same totals check during setup tests and final record creation."""
     if target not in {"purchase_order", "sales_invoice"}:
         return
+    quantity_field = "quantity_ordered" if target == "purchase_order" else "quantity_invoiced"
+    issues = [issue for line in lines for issue in line_amount_issues(line, quantity_field)]
+    if issues:
+        raise ValidationError(issues)
     charges = getattr(record, "other_charges", Decimal("0"))
     total = record.subtotal - record.discount_amount + record.tax_amount + charges
     line_total = sum((line.line_total for line in lines), Decimal("0")) + charges
@@ -127,14 +132,18 @@ def save_result(mode, config, parsed, log=None, route=None, database_source=None
     record = Record(**values)
     record.full_clean()
     record.save()
+    line_records = []
     if has_lines:
         Line = model(mode, Record.__name__+"Line")
         parent = {"purchase_order": "purchase_order", "delivery_receipt": "delivery_receipt", "sales_invoice": "invoice"}[target]
         for row in line_rows:
             line = Line(**values_for(mode, config, row, lines=True, canonical=route is not None), **{parent: record})
             line.full_clean()
-            line.save()
-    validate_totals(target, record, list(record.lines.all()) if has_lines else [])
+            line_records.append(line)
+    # Validate the exact parsed decimals before persistence can round them (notably SQLite).
+    validate_totals(target, record, line_records)
+    for line in line_records:
+        line.save()
     if log:
         setattr(log, target, record)
         log.status = "completed"

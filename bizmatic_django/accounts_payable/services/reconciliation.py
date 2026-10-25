@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models import Sum
+
+from accounts_receivable.services.amounts import line_amount_difference, line_amount_issues
 
 if TYPE_CHECKING:
     from ..models import (
@@ -24,11 +26,11 @@ if TYPE_CHECKING:
         PaymentAllocation,
     )
 
-    SourceRecord = (
+    type SourceRecord = (
         CompanyPurchaseOrder | SupplierDeliveryReceipt | SupplierSalesInvoice | CompanyPayment
     )
-    CaseDocument = CompanyPurchaseOrder | SupplierDeliveryReceipt | SupplierSalesInvoice
-    DocumentLine = CompanyPurchaseOrderLine | SupplierDeliveryReceiptLine | SupplierSalesInvoiceLine
+    type CaseDocument = CompanyPurchaseOrder | SupplierDeliveryReceipt | SupplierSalesInvoice
+    type DocumentLine = CompanyPurchaseOrderLine | SupplierDeliveryReceiptLine | SupplierSalesInvoiceLine
 
 ZERO = Decimal("0")
 PRICE_TOLERANCE = Decimal(str(getattr(settings, "RECONCILIATION_PRICE_TOLERANCE", "0.01")))
@@ -147,6 +149,13 @@ def validate_match(match: DocumentMatch) -> None:
         and (receipt_line is not None)
     ):
         invoice_line = match.invoice_line
+        for line, quantity_field, field in (
+            (invoice_line, "quantity_invoiced", "invoice_line"),
+            (order_line, "quantity_ordered", "purchase_order_line"),
+        ):
+            issues = line_amount_issues(line, quantity_field, PRICE_TOLERANCE)
+            if issues:
+                errors[field] = "; ".join(issues)
         if not invoice.invoice_reference_no or not invoice.invoice_date or (not invoice.currency):
             errors["invoice_line"] = (
                 "Invoice reference, date, and currency are required for matching."
@@ -324,16 +333,22 @@ def calculate_reconciliation(case: Transaction) -> tuple[str, Decimal]:
     covered_any = False
     all_covered = bool(invoice_lines)
     discrepancy = ZERO
+    invalid_amounts = False
     for order in case.purchase_orders.all():
+        order_lines = list(order.lines.all())
         charges = order.other_charges
         expected_total = order.subtotal - order.discount_amount + order.tax_amount + charges
-        line_total = sum((line.line_total for line in order.lines.all()), ZERO) + charges
+        line_total = sum((line.line_total for line in order_lines), ZERO) + charges
         header_difference = abs(order.total_amount - expected_total)
         line_difference = abs(order.total_amount - line_total)
         if header_difference > PRICE_TOLERANCE:
             discrepancy += header_difference
         if line_difference > PRICE_TOLERANCE:
             discrepancy += line_difference
+        for line in order_lines:
+            if line_amount_issues(line, "quantity_ordered", PRICE_TOLERANCE):
+                invalid_amounts = True
+                discrepancy += line_amount_difference(line, "quantity_ordered")
     for invoice in invoices:
         expected_total = (
             invoice.subtotal - invoice.discount_amount + invoice.tax_amount + invoice.other_charges
@@ -361,8 +376,11 @@ def calculate_reconciliation(case: Transaction) -> tuple[str, Decimal]:
             or ZERO
         )
         covered_any = covered_any or covered > ZERO
-        all_covered = all_covered and covered == line.quantity_invoiced
-        if covered < line.quantity_invoiced:
+        all_covered = all_covered and line.quantity_invoiced > ZERO and covered == line.quantity_invoiced
+        if line_amount_issues(line, "quantity_invoiced", PRICE_TOLERANCE):
+            invalid_amounts = True
+            discrepancy += line_amount_difference(line, "quantity_invoiced")
+        elif covered < line.quantity_invoiced:
             discrepancy += (line.quantity_invoiced - covered) * line.unit_price
     invalid_match = False
     for match in case.line_matches.filter(match_status="matched"):
@@ -370,9 +388,13 @@ def calculate_reconciliation(case: Transaction) -> tuple[str, Decimal]:
             match.clean()
         except ValidationError:
             invalid_match = True
-            discrepancy += match.invoice_line.unit_price * match.matched_quantity
+            # Arithmetic discrepancies were counted above, including legacy saved matches.
+            if not (line_amount_issues(match.invoice_line, "quantity_invoiced", PRICE_TOLERANCE)
+                    or (match.purchase_order_line and line_amount_issues(match.purchase_order_line, "quantity_ordered", PRICE_TOLERANCE))):
+                discrepancy += match.invoice_line.unit_price * match.matched_quantity
     has_exception = (
         invalid_match
+        or invalid_amounts
         or case.line_matches.filter(match_status="exception").exists()
         or any((invoice.invoice_status == "void" for invoice in invoices))
     )
@@ -384,7 +406,12 @@ def calculate_reconciliation(case: Transaction) -> tuple[str, Decimal]:
         status = "partial"
     else:
         status = "pending"
-    return (status, discrepancy.quantize(Decimal("0.01")))
+    with localcontext() as amount_context:
+        amount_context.prec = 40
+        discrepancy = discrepancy.quantize(Decimal("0.01"))
+    # Return a validation message rather than persisting an unreadable monetary value.
+    case._meta.get_field("total_discrepancy_amount").clean(discrepancy, case)
+    return (status, discrepancy)
 
 
 def validate_case(case: Transaction) -> None:

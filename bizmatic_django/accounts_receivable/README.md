@@ -26,6 +26,14 @@ Completed routes are idempotent. A new route cannot silently re-create an alread
 processed document/target or overwrite an existing reference. Existing accounting
 records stay read-only in the extraction registers.
 
+AP/AR setup tests and final extraction saves check each order/invoice line against
+quantity × unit price − discount + tax, rounded to cents using half-up rounding.
+Setup uses a one-cent tolerance; reconciliation uses its configured price tolerance
+(one cent by default). Header charges remain separate. Quantities must be positive.
+Reconciliation checks saved source lines again and keeps inconsistent
+records in exception without rewriting the source amounts. Discrepancies outside
+the stored monetary range return a validation message instead of being saved.
+
 Configurations are drafts until the user submits them. Editing a saved profile
 returns it to draft; its previous submitted snapshot remains in history.
 Assistant calls save proposals and logs, but applying suggestions to a draft and

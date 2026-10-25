@@ -91,6 +91,8 @@ def save_allocations(mode, record_id, data):
     rows = data.get("allocations")
     if not isinstance(rows, list) or len(rows) > 1000:
         raise ValidationError("Provide up to 1,000 allocations.")
+    if any(not isinstance(row, dict) for row in rows):
+        raise ValidationError("Each allocation must be an object containing its field values.")
     old_ids = set(payment.invoice_allocations.values_list("invoice_id", flat=True))
     seen = set()
     payment.invoice_allocations.all().delete()
@@ -120,6 +122,8 @@ def save_matches(mode, record_id, data):
     rows = data.get("matches")
     if not isinstance(rows, list) or len(rows) > 1000:
         raise ValidationError("Provide up to 1,000 line matches.")
+    if any(not isinstance(row, dict) for row in rows):
+        raise ValidationError("Each line match must be an object containing its field values.")
     case.line_matches.all().delete()
     seen = set()
     for row in rows:
