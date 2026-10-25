@@ -1,5 +1,4 @@
 """Annotations become an LLM prompt; tests use the configured setup provider and real text."""
-import json
 import re
 from django.core.exceptions import ValidationError
 from .. import llm
@@ -39,7 +38,7 @@ def validate_annotations(mode, target, document, complete=False):
                 value = text.encode('utf-16-le')[annotation['start']*2:annotation['end']*2].decode('utf-16-le').strip()
             except UnicodeDecodeError:
                 raise ValidationError('Highlight complete characters for '+allowed[key]['label']+'.') from None
-            value = re.sub(r'^\*\*(.*?)\*\*$|^`(.*?)`$', lambda match: match.group(1) or match.group(2), value, flags=re.S)
+            value = re.sub(r'^\*\*(.*?)\*\*$|^`(.*?)`$', r'\1\2', value, flags=re.S)
             if annotation.get('value') != value:
                 raise ValidationError('The annotation no longer matches the text. Highlight '+allowed[key]['label']+' again.')
             if not isinstance(annotation.get('anchor'), dict):

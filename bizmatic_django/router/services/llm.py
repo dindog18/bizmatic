@@ -3,6 +3,7 @@
 import json
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from pydantic import PositiveInt, TypeAdapter
 
@@ -52,7 +53,7 @@ def settings() -> RoutingSettings:
 def request_payload(config: RoutingSettings, text: str, rules: list[dict]) -> tuple[str, dict]:
     content = json.dumps({"routing_rules": rules, "document_text": text}, ensure_ascii=False)
     prompt = SYSTEM_PROMPT + "\n\n" + content
-    body = {"model": config.model, "messages": [
+    body: dict[str, Any] = {"model": config.model, "messages": [
         {"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": content},
     ], "max_tokens": config.max_output_tokens}
     if config.provider == "anthropic":
@@ -112,9 +113,21 @@ def parse_response(provider: str, result: dict, allowed_ids: set[int]) -> Routin
     return parsed
 
 
-def usage(result: dict) -> dict:
-    data = result.get("usage") or result.get("usageMetadata") or {}
+def usage(result: object) -> dict[str, int | None]:
+    """Keep provider-reported counts; absent or invalid counts remain unknown."""
+    if not isinstance(result, dict):
+        result = {}
+    data = result.get("usage")
+    if not isinstance(data, dict):
+        data = result.get("usageMetadata")
+    if not isinstance(data, dict):
+        data = {}
+
+    def count(*values):
+        # Booleans, negatives and non-integers cannot be stored as token counts.
+        return next((value for value in values if type(value) is int and value >= 0), None)
+
     return {
-        "input_tokens": data.get("prompt_tokens", data.get("input_tokens", data.get("promptTokenCount", result.get("prompt_eval_count")))),
-        "output_tokens": data.get("completion_tokens", data.get("output_tokens", data.get("candidatesTokenCount", result.get("eval_count")))),
+        "input_tokens": count(data.get("prompt_tokens"), data.get("input_tokens"), data.get("promptTokenCount"), result.get("prompt_eval_count")),
+        "output_tokens": count(data.get("completion_tokens"), data.get("output_tokens"), data.get("candidatesTokenCount"), result.get("eval_count")),
     }

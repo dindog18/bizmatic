@@ -4,7 +4,6 @@ from django.shortcuts import get_object_or_404
 
 from db_extraction.models import DatabaseSource, DatabaseTable
 from document_extraction.models import DocExtractionLog, LLMExtractionLog, Document
-from ..catalog import fields, required_fields
 
 
 def catalog(mode, target):
@@ -70,6 +69,6 @@ def document_text(document_id):
         raise ValidationError('Choose an available extracted document.')
     cls = LLMExtractionLog if kind == 'llm' else DocExtractionLog
     row = get_object_or_404(cls.objects.select_related('fk_document_no'), pk=int(pk))
-    if not row.markdown_text or not row.markdown_text.strip() or row.error_message or kind == 'llm' and row.status != 'completed':
+    if not row.markdown_text or not row.markdown_text.strip() or row.error_message or isinstance(row, LLMExtractionLog) and row.status != 'completed':
         raise ValidationError('This document has no successful extracted text. Choose another document or paste text.')
     return {'text': row.markdown_text, 'id': f'{kind}:{row.pk}', 'name': row.fk_document_no.file_name}

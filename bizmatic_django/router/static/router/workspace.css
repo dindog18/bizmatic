@@ -1,6 +1,6 @@
 /* Router additions to the shared Falcon extraction workspace. */
 #router-app { font-size: .875rem; }
-.router-demo { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:.85rem 1rem; background:#e9f2ff; border-left:3px solid var(--falcon-primary); border-radius:.25rem; font-size:.8125rem; color:#254b7b; }
+.router-demo { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:.85rem 1rem; background:var(--biz-color-selection-bg); border-left:3px solid var(--falcon-primary); border-radius:.25rem; font-size:.8125rem; color:var(--biz-color-info-fg); }
 .router-tabs { display:flex; gap:1.75rem; overflow-x:auto; border-bottom:1px solid var(--falcon-border-color); }
 .router-tabs a { flex-shrink:0; color:var(--falcon-secondary-color); padding:0 0 .8rem; border-bottom:2px solid transparent; font-weight:600; }
 .router-tabs a[aria-current] { color:var(--falcon-primary); border-color:var(--falcon-primary); }
@@ -12,25 +12,25 @@
 .router-metric span { color:var(--falcon-secondary-color); font-size:.8125rem; }
 .router-metric strong { display:block; font-size:1.8rem; font-weight:600; margin-top:.3rem; }
 .router-metric small { color:var(--falcon-secondary-color); }
-.router-toolbar { display:flex; flex-wrap:wrap; gap:.75rem; padding:1rem 1.25rem; border-top:1px solid var(--falcon-border-color); }
+.router-toolbar { display:flex; flex-wrap:wrap; gap:.75rem; padding:1rem var(--app-card-padding); border-top:1px solid var(--falcon-border-color); }
 .router-toolbar input { flex:2 1 14rem; width:auto; }
 .router-toolbar select { flex:1 1 10rem; width:auto; }
 .router-table { font-size:.8125rem; min-width:720px; }
 .router-table th { padding:.85rem 1rem; white-space:nowrap; background:var(--falcon-gray-100); }
 .router-table td { padding:1rem; vertical-align:middle; }
-.router-table td:first-child,.router-table th:first-child { padding-left:1.5rem; }
-.router-table td:last-child,.router-table th:last-child { padding-right:1.5rem; }
+.router-table td:first-child,.router-table th:first-child { padding-left:var(--app-card-padding); }
+.router-table td:last-child,.router-table th:last-child { padding-right:var(--app-card-padding); }
 .router-file { display:flex; align-items:center; gap:.75rem; }
-.router-file-icon { color:var(--falcon-primary); background:#edf2f9; border-radius:.3rem; width:2.25rem; height:2.75rem; display:grid; place-items:center; flex-shrink:0; }
+.router-file-icon { color:var(--falcon-primary); background:var(--biz-color-bg-subtle); border-radius:.3rem; width:2.25rem; height:2.75rem; display:grid; place-items:center; flex-shrink:0; }
 .router-subtext { color:var(--falcon-secondary-color); font-size:.75rem; margin-top:.25rem; overflow-wrap:anywhere; }
 .router-destinations { display:flex; flex-wrap:wrap; gap:.35rem; max-width:16rem; }
-.router-tag { display:inline-flex; align-items:center; padding:.25rem .45rem; background:#edf2f9; border-radius:.25rem; color:#445a74; font-size:.7rem; font-weight:600; }
-.router-pagination { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:1rem 1.5rem; border-top:1px solid var(--falcon-border-color); color:var(--falcon-secondary-color); font-size:.8125rem; }
+.router-tag { display:inline-flex; align-items:center; padding:.25rem .45rem; background:var(--biz-color-bg-subtle); border-radius:.25rem; color:var(--biz-color-text-secondary); font-size:.7rem; font-weight:600; }
+.router-pagination { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:1rem var(--app-card-padding); border-top:1px solid var(--falcon-border-color); color:var(--falcon-secondary-color); font-size:.8125rem; }
 .router-empty { padding:3.5rem 1rem; text-align:center; }
 .router-empty h2 { font-size:1.1rem; }
-.router-review { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr); gap:1.25rem; align-items:start; }
+.router-review { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr); gap:var(--app-layout-gap); align-items:start; }
 .router-review > * { min-width:0; }
-.router-paper { padding:1.75rem; background:white; color:#344050; border:1px solid var(--falcon-border-color); margin:1.25rem; border-radius:.25rem; }
+.router-paper { padding:1.75rem; background:white; color:var(--biz-color-text-primary); border:1px solid var(--falcon-border-color); margin:1.25rem; border-radius:.25rem; }
 .router-paper pre { white-space:pre-wrap; font-family:inherit; font-size:.875rem; line-height:1.9; color:inherit; margin:0; }
 .router-review-list { display:flex; flex-direction:column; gap:1rem; }
 .router-review-list .router-route { padding:1.25rem; }
@@ -41,7 +41,7 @@
 .router-confidence .progress { height:.3rem; flex:1; max-width:8rem; }
 .router-review-actions { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1rem; }
 .router-review-actions button { flex:1 1 auto; white-space:nowrap; }
-.router-form-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:1.25rem; align-items:start; }
+.router-form-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:var(--app-layout-gap); align-items:start; }
 .router-form-help { background:var(--falcon-gray-100); padding:1.25rem; border-radius:.25rem; line-height:1.75; }
 .router-form-help h2 { font-size:1rem; }
 .router-form-help p,.router-form-help li { font-size:.8125rem; }
@@ -57,9 +57,9 @@
 .router-log-stats { display:flex; flex-wrap:wrap; gap:1.5rem; font-size:.8125rem; }
 .router-log-stats dt { color:var(--falcon-secondary-color); font-weight:400; }
 .router-log-stats dd { font-weight:600; margin:.25rem 0 0; }
-.router-log-section summary { padding:1rem 1.25rem; cursor:pointer; font-weight:600; font-size:.875rem; }
+.router-log-section summary { padding:1rem var(--app-card-padding); cursor:pointer; font-weight:600; font-size:.875rem; }
 .router-log-section pre { max-height:25rem; overflow:auto; font-size:.75rem; margin:0; }
-#router-app .btn { min-height:36px; }
+#router-app .btn { min-height:var(--app-control-height); }
 #router-app :is(input,select,textarea):focus-visible { outline:2px solid var(--falcon-primary); outline-offset:2px; }
 @media (max-width:991.98px) { .router-review,.router-form-layout { grid-template-columns:minmax(0,1fr); } }
 @media (max-width:575.98px) { .router-demo,.router-heading { flex-direction:column; align-items:stretch; } .router-heading h1 { font-size:1.3rem; } .router-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; } .router-metric { padding:1rem; } .router-tabs { gap:1.25rem; } .router-pagination { padding:1rem; } .router-paper { padding:1rem; margin:.75rem; } }

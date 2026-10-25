@@ -27,6 +27,15 @@
       mappings:mappingsFor(suggestedTable()),section:'source',messages:[],draft:'',result:null,stale:false,confirmed:false,notice:'',mapSearch:'',mapFilter:'all',sourceRows:false};
     state.mappings=fields.map(field=>({include:field.required,method:'empty',column:'',value:'',...field,...state.mappings?.find(item=>item.id===field.id)}));
     state.messages ||= [];state.section ||= 'source';state.serial ||= 1;state.filters ||= {id:'root',logic:'all',children:[]};state.sorts ||= [];state.limit ||= 5;state.mapSearch ||= '';state.mapFilter ||= 'all';
+    // Saved query rules omit editor identifiers. Restore them before binding the controls.
+    function identifyFilters(group=state.filters, root=true) {
+      group.id ||= root ? 'root' : uid('group');
+      group.children.forEach(rule => {
+        if (rule.children) identifyFilters(rule, false);
+        else rule.id ||= uid('filter');
+      });
+    }
+    identifyFilters();
     state.keyMode ||= 'auto';
     state.keyFields ||= [];
     state.keyEditor ||= false;
@@ -189,7 +198,7 @@
     }
     async function applyMessage(text){
       if(!text.trim())return;
-      try{const response=await api.chat(text);Object.assign(state,response.record.setup_data.database);state.mappings=fields.map(field=>({include:field.required,method:'empty',column:'',value:'',...field,...state.mappings.find(item=>item.id===field.id)}));state.messages.push({role:'user',text},{role:'assistant',text:response.message});state.draft='';if(response.changed)dirty('Assistant changes are visible. Run a new test before saving.');render();}catch(error){api.error(error);}
+      try{const response=await api.chat(text);Object.assign(state,response.record.setup_data.database);identifyFilters();state.mappings=fields.map(field=>({include:field.required,method:'empty',column:'',value:'',...field,...state.mappings.find(item=>item.id===field.id)}));state.messages.push({role:'user',text},{role:'assistant',text:response.message});state.draft='';if(response.changed)dirty('Assistant changes are visible. Run a new test before saving.');render();}catch(error){api.error(error);}
     }
     async function review(){if(canConfirm()){try{if(await api.review(true)){state.confirmed=true;state.notice='Configuration saved and activated.';render();}}catch(error){api.error(error);}}}
     root.addEventListener('input',event=>{

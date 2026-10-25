@@ -5,56 +5,57 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ page_title }} | Bizmatic</title>
-  <link rel="icon" href="{% static 'document_extraction/favicon.svg' %}" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="{% static 'document_extraction/brand/approved-canva-symbol.png' %}" type="image/png">
+  <link rel="preload" href="{% static 'document_extraction/brand/Inter-variable.ttf' %}" as="font" type="font/ttf" crossorigin>
+  <script src="{% static 'document_extraction/brand/theme-init.js' %}"></script>
   <link rel="stylesheet" href="{% static 'document_extraction/falcon/assets/css/theme.min.css' %}">
-  <link rel="stylesheet" href="{% static 'document_extraction/app.css' %}?v=document-review-2">
-  <link rel="stylesheet" href="{% static 'document_extraction/help-tour.css' %}?v=1">
+  <link rel="stylesheet" href="{% static 'document_extraction/app.css' %}?v=workspace-spacing-1">
+  <link rel="stylesheet" href="{% static 'document_extraction/help-tour.css' %}?v=workspace-spacing-1">
   {% block extra_styles %}{% endblock %}
+  <link rel="stylesheet" href="{% static 'document_extraction/brand/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'document_extraction/brand/workspace-theme.css' %}">
 </head>
-<body>
+<body class="biz-app">
   <a class="skip-link" href="#page-content">Skip to content</a>
   <main class="main" id="top">
     <div class="container" data-layout="container">
       <nav class="navbar navbar-light navbar-vertical navbar-expand-xl" aria-label="Main navigation">
         <div class="d-flex align-items-center">
           <a class="navbar-brand" href="{% url 'DOC_EXTRACTION:document_list' %}">
-            <div class="d-flex align-items-center py-3"><span class="brand-icon me-2"><span class="fas fa-layer-group" aria-hidden="true"></span></span><span class="font-sans-serif text-primary">bizmatic</span></div>
+            <span class="biz-brand"><img class="biz-brand-symbol" src="{% static 'document_extraction/brand/approved-canva-symbol.png' %}" width="32" height="32" alt=""><span>Bizmatic</span></span>
           </a>
         </div>
         <div class="collapse navbar-collapse" id="navbarVerticalCollapse">
           <div class="navbar-vertical-content scrollbar">
-            <ul class="navbar-nav flex-column mt-3 mb-3"><li class="nav-item"><a class="nav-link {% if section == 'setup' %}active{% endif %}" href="{% url 'setup' %}" {% if section == 'setup' %}aria-current="page"{% endif %}><span class="fas fa-tasks me-2" aria-hidden="true"></span>Application setup {% if setup_missing %}<span class="badge bg-warning text-dark ms-1">{{ setup_missing }} missing</span>{% endif %}</a></li></ul>
-            <div class="navbar-vertical-label mt-3 mb-2 px-3">Accounting workspace</div>
+            <div class="navbar-vertical-label mt-3 mb-2 px-3">Financial operations</div>
             <ul class="navbar-nav flex-column mb-3">
               <li class="nav-item"><a class="nav-link {% if section == 'receivables' %}active{% endif %}" {% if section == 'receivables' %}aria-current="page"{% endif %} href="{% url 'ACCOUNTS_RECEIVABLE:overview' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-arrow-down" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Accounts receivable</span></div></a></li>
               <li class="nav-item"><a class="nav-link {% if section == 'payables' %}active{% endif %}" {% if section == 'payables' %}aria-current="page"{% endif %} href="{% url 'ACCOUNTS_PAYABLE:overview' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-arrow-up" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Accounts payable</span></div></a></li>
             </ul>
-            <div class="navbar-vertical-label mt-3 mb-2 px-3">Document workspace</div>
+            <div class="navbar-vertical-label mt-3 mb-2 px-3">Data &amp; documents</div>
             <ul class="navbar-nav flex-column mb-3">
               <li class="nav-item"><a class="nav-link {% if section == 'documents' %}active{% endif %}" {% if section == 'documents' %}aria-current="page"{% endif %} href="{% url 'DOC_EXTRACTION:document_list' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-file-alt" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Documents</span></div></a></li>
               <li class="nav-item"><a class="nav-link {% if section == 'upload' %}active{% endif %}" {% if section == 'upload' %}aria-current="page"{% endif %} href="{% url 'DOC_EXTRACTION:document_upload' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-cloud-upload-alt" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Upload documents</span></div></a></li>
               <li class="nav-item"><a class="nav-link {% if section == 'batches' %}active{% endif %}" {% if section == 'batches' %}aria-current="page"{% endif %} href="{% url 'DOC_EXTRACTION:batch_list' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-folder-open" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Batches</span></div></a></li>
             </ul>
-            <div class="navbar-vertical-label mt-3 mb-2 px-3">Routing workspace</div>
             <ul class="navbar-nav flex-column mb-3">
               <li class="nav-item"><a class="nav-link {% if section == 'router' %}active{% endif %}" {% if section == 'router' %}aria-current="page"{% endif %} href="{% url 'ROUTER:queue' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-random" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Document routing</span></div></a></li>
             </ul>
-            <div class="navbar-vertical-label mt-3 mb-2 px-3">Database workspace</div>
             <ul class="navbar-nav flex-column mb-3">
               <li class="nav-item"><a class="nav-link {% if section == 'databases' %}active{% endif %}" {% if section == 'databases' %}aria-current="page"{% endif %} href="{% url 'DB_EXTRACTION:source_list' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-database" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Database connections</span></div></a></li>
             </ul>
+            <div class="navbar-vertical-label mt-3 mb-2 px-3">Manage</div>
+            <ul class="navbar-nav flex-column mb-3"><li class="nav-item"><a class="nav-link {% if section == 'setup' %}active{% endif %}" href="{% url 'setup' %}" {% if section == 'setup' %}aria-current="page"{% endif %}><span class="nav-link-icon"><span class="fas fa-sliders-h" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Settings &amp; setup</span>{% if setup_missing %}<span class="biz-setup-count" aria-label="{{ setup_missing }} setup steps remaining">{{ setup_missing }}</span>{% endif %}</a></li></ul>
+            <div class="biz-sidebar-footer">Business, in order.<span>Bizmatic workspace</span></div>
           </div>
         </div>
       </nav>
       <div class="content">
         <nav class="navbar navbar-light navbar-glass navbar-top navbar-expand" aria-label="Workspace header">
           <button class="btn navbar-toggler-humburger-icon navbar-toggler me-2" type="button" data-bs-toggle="collapse" data-bs-target="#navbarVerticalCollapse" aria-controls="navbarVerticalCollapse" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggle-icon"><span class="toggle-line"></span></span></button>
-          <a class="navbar-brand mobile-brand me-auto" href="{% url 'DOC_EXTRACTION:document_list' %}"><span class="font-sans-serif text-primary">bizmatic</span></a>
-          <span class="d-none d-xl-inline text-600 fs-10 me-auto">{% block workspace_title %}OCR &amp; document storage{% endblock %}</span>
-          <a class="btn btn-sm btn-outline-primary me-2" href="{% url 'setup' %}">Setup{% if setup_missing %}<span class="badge bg-warning text-dark ms-1">{{ setup_missing }}</span>{% endif %}</a>
+          <a class="navbar-brand mobile-brand me-auto" href="{% url 'DOC_EXTRACTION:document_list' %}"><span class="biz-brand"><img class="biz-brand-symbol" src="{% static 'document_extraction/brand/approved-canva-symbol.png' %}" width="26" height="26" alt=""><span>Bizmatic</span></span></a>
+          <span class="biz-header-title d-none d-xl-inline me-auto">{% block workspace_title %}Document workspace{% endblock %}</span>
+          <button class="btn btn-sm btn-light biz-theme-toggle me-2" type="button" data-theme-toggle aria-label="Switch to dark theme" aria-pressed="false"><span class="fas fa-moon" data-theme-icon aria-hidden="true"></span></button>
           <button type="button" class="btn btn-sm btn-light" data-help-start aria-haspopup="dialog" aria-controls="help-tour"><span class="fas fa-question-circle me-1" aria-hidden="true"></span>Help<span class="visually-hidden"> on this page</span></button>
         </nav>
         <div id="page-content" tabindex="-1">
@@ -72,6 +73,7 @@
   <script src="{% static 'document_extraction/falcon/vendors/popper/popper.min.js' %}"></script>
   <script src="{% static 'document_extraction/falcon/vendors/bootstrap/bootstrap.min.js' %}"></script>
   <script src="{% static 'document_extraction/falcon/vendors/fontawesome/all.min.js' %}"></script>
+  <script src="{% static 'document_extraction/brand/workspace-ui.js' %}" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

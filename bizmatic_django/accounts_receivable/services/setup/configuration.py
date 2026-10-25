@@ -1,7 +1,7 @@
 """Validate record-first state and bridge it to the existing extraction/import profiles."""
 import json
 from django.core.exceptions import ValidationError
-from ..catalog import fields, required_fields, model
+from ..catalog import fields, model
 
 
 def validate_setup(record, mode, submit=False):
@@ -62,8 +62,11 @@ def clean_output(mode, config, result):
         issues.append('This record type does not have line items.')
     if len(result.get('lines', [])) > 1000:
         raise ValidationError('A record exceeds 1,000 line items.')
+    if any(not isinstance(row, dict) for row in result.get('lines', [])):
+        raise ValidationError('Each line item must be an object containing its field values.')
     converted_rows = []
-    for values, is_line in [(result['record'], False), *[(row, True) for row in result.get('lines', [])]]:
+    line_rows = [(row, True) for row in result.get('lines', [])] if has_lines else []
+    for values, is_line in [(result['record'], False), *line_rows]:
         try:
             converted = values_for(mode, config, values, lines=is_line, canonical=config.source_type == 'document')
             converted_rows.append(converted)

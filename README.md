@@ -1,8 +1,9 @@
 # Bizmatic
 
-A Django workspace for browsing documents, batches, and extraction history,
-with Python services for local file storage, document text extraction, and
-image OCR through configurable LLM providers.
+A Django application for document and financial operations. Bizmatic supports
+document extraction and review, approved document routing, AP/AR records and
+reconciliation, PostgreSQL metadata exploration, and bounded accounting imports.
+The existing Django and Bootstrap workspaces use the approved Bizmatic identity.
 
 ## Current functionality
 
@@ -12,11 +13,16 @@ image OCR through configurable LLM providers.
 - Extraction services for text-based PDFs, DOCX, Excel, TXT, and CSV.
 - Image extraction adapters for Ollama, OpenAI, Anthropic, Google, Mistral,
   Alibaba, and DeepSeek. Available capabilities depend on the configured model.
+- Document upload, extraction reruns, review and editing, and routing through
+  CSRF-protected Django actions.
+- Separate AP and AR workspaces for suppliers/customers, orders, delivery
+  receipts, invoices, payments, aging, reconciliation, and record-first setup.
+- Bounded PostgreSQL schema discovery and reviewed, idempotent AP/AR imports.
+- A responsive shared application shell with light and dark themes.
 
-The application pages currently accept GET/HEAD only. Uploading, starting or
-rerunning extraction, changing review status, and original-file downloads are
-not wired to backend actions. Services can be invoked from Python, but browsing
-the UI does not trigger them. See [frontend behavior](bizmatic_django/document_extraction/FRONTEND.md).
+Provider calls and imports run during HTTP requests. The application does not
+include a background queue, application-level login, or organization/user
+management. See the module guides for workflow limits and operating requirements.
 
 ## Local setup
 
@@ -54,11 +60,14 @@ python bizmatic_django/manage.py migrate
 python bizmatic_django/manage.py runserver
 ```
 
-Open [Documents](http://127.0.0.1:8000/documents/) or
-[Batches](http://127.0.0.1:8000/batches/). A fresh database shows empty states;
-setup does not create sample documents. Restart the server after configuration
-changes. `migrate` creates or updates tables in the configured database; it does
-not create the PostgreSQL database itself or copy records from an old database.
+Open [Documents](http://127.0.0.1:8000/documents/),
+[Accounts payable](http://127.0.0.1:8000/accounts-payable/),
+[Accounts receivable](http://127.0.0.1:8000/accounts-receivable/), or
+[Database connections](http://127.0.0.1:8000/databases/). A fresh database shows
+empty states; setup does not seed application records. Restart the server after
+configuration changes. `migrate` creates or updates tables in the configured
+database; it does not create the PostgreSQL database itself or copy records from
+an old database.
 
 ## Configuration
 
@@ -108,6 +117,10 @@ bizmatic_django/
   manage.py                      Django management entry point
   .env.example                   Shareable configuration template
   bizmatic_django/                Settings and ASGI/WSGI entry points
+  accounts_payable/              AP records, services, templates and tests
+  accounts_receivable/           AR records, shared AP/AR workspace and APIs
+  db_extraction/                 PostgreSQL metadata and accounting imports
+  router/                        Document routing, review and handoff
   document_extraction/
     models.py                    Database models
     migrations/                  Versioned schema changes
@@ -121,8 +134,17 @@ bizmatic_django/
     util.py                      Compatibility exports
 ```
 
-The application does not seed demo records. The document workspace shows an
-empty state until users upload documents.
+## Brand assets
+
+The application shell uses the approved Bizmatic symbol from
+[`approved-canva-symbol.png`](bizmatic_django/document_extraction/static/document_extraction/brand/approved-canva-symbol.png)
+and the bundled Inter variable font. The font's SIL Open Font License is in the
+same directory. Approved colors, semantic tokens, theme behavior, and the Django
+workspace adapter live there as well. The supplied logo is a raster PNG; this
+repository does not claim to contain a separate vector logo master.
+
+The application does not seed demo records. Fresh workspaces show empty states
+until records are uploaded or created through the supported workflows.
 
 ## Checks
 

@@ -2,7 +2,6 @@
 import hashlib
 import json
 import re
-from copy import deepcopy
 
 from django.core import signing
 from django.core.exceptions import ValidationError
@@ -15,7 +14,7 @@ from db_extraction.services.extraction import refresh_source
 from db_extraction.services.postgres import InspectionError
 from .. import configuration, configuration_chat, llm, pages
 from ..assistant import attempt_error
-from ..catalog import model, party_key
+from ..catalog import model
 from . import context, database, documents
 
 

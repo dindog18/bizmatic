@@ -7,15 +7,15 @@
 <div class="page-heading d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
   <div><h1 class="fs-6 mb-1">{% if edit_mode %}Edit Markdown{% else %}{{ kind }} extraction #{{ log.log_no }}{% endif %}</h1><p class="text-600 mb-0 text-break">{{ document.file_name }}</p></div>
   <div class="d-flex flex-wrap gap-2">
-    <button id="compare-toggle" class="btn btn-falcon-default" type="button" aria-controls="source-panel" aria-expanded="{% if edit_mode %}true{% else %}false{% endif %}"><span class="fas fa-columns me-2" aria-hidden="true"></span><span>{% if edit_mode %}Hide original{% else %}Compare original{% endif %}</span></button>
+    <button id="compare-toggle" class="btn btn-falcon-default" type="button" aria-controls="source-panel" aria-expanded="true"><span class="fas fa-columns me-2" aria-hidden="true"></span><span>Hide original</span></button>
     {% if not edit_mode %}<a class="btn btn-falcon-primary" href="{% url log.edit_route document.document_no log.log_no %}"><span class="fas fa-edit me-2" aria-hidden="true"></span>Edit Markdown</a><a class="btn btn-outline-danger" href="{% url log.delete_route document.document_no log.log_no %}">Delete extraction</a>{% endif %}
     <a class="btn btn-falcon-default" href="{% if edit_mode %}{% url log.detail_route document.document_no log.log_no %}{% else %}{% url 'DOC_EXTRACTION:document_detail' document.document_no %}{% endif %}">{% if edit_mode %}Back to result{% else %}Back to document{% endif %}</a>
   </div>
 </div>
 {% if edit_mode %}<div class="alert alert-info fs-10 mb-3">Save Markdown to update this extraction. Changed content needs a new accuracy check and review.</div>{% for error in form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endfor %}{% for error in form.markdown_text.errors %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endfor %}{% endif %}
 {% if log.error_message %}<div class="alert alert-danger fs-10 mb-3"><strong>Processing error:</strong> {{ log.error_message }}</div>{% endif %}
-<div id="review-workspace" class="review-workspace {% if edit_mode %}is-comparing{% endif %}" data-download-name="{{ document.file_name }}">
-  <div id="source-panel" {% if not edit_mode %}hidden{% endif %}>{% include 'document_extraction/includes/file_preview.html' %}</div>
+<div id="review-workspace" class="review-workspace is-comparing" data-download-name="{{ document.file_name }}">
+  <div id="source-panel">{% include 'document_extraction/includes/file_preview.html' %}</div>
   {% if edit_mode %}<form id="markdown-form" class="card markdown-panel" method="post" aria-labelledby="result-heading">{% csrf_token %}{{ form.revision }}{% else %}<section class="card markdown-panel" aria-labelledby="result-heading">{% endif %}
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2"><h2 class="fs-9 mb-0" id="result-heading">{% if edit_mode %}Markdown editor{% else %}Extracted result{% endif %}</h2><div class="d-flex gap-2">{% if is_llm %}<span class="badge badge-subtle-{{ log.color }}">{{ log.status_label }}</span>{% endif %}{% if log.user_selected_accurate %}<span class="badge badge-subtle-success">Selected as accurate</span>{% endif %}</div></div>
     <div class="markdown-tabs border-bottom px-3 py-2 d-flex flex-wrap align-items-center gap-2" role="tablist" aria-label="Markdown display">

@@ -28,11 +28,12 @@ def route(row):
     if mode:
         target = next((key for key, name in TARGETS[mode].items() if name == row.destination.target_model), None)
         base = "/accounts-receivable/" if mode == "ar" else "/accounts-payable/"
-        profiles = list(model(mode, "ExtractionConfiguration").objects.filter(status="submitted", source_type="document", target_entity=target).values("id", "name"))
+        if target is not None:
+            profiles = list(model(mode, "ExtractionConfiguration").objects.filter(status="submitted", source_type="document", target_entity=target).values("id", "name"))
         log = model(mode, "LLMExtractionLog").objects.filter(routing_route=row).order_by("-pk").first()
         if log:
             history_url = base + f"llm-logs/{log.pk}/"
-            record_id = getattr(log, target+"_id", None)
+            record_id = getattr(log, target+"_id", None) if target is not None else None
             resource = {"customer": "customers", "supplier": "suppliers", "purchase_order": "purchase-orders", "delivery_receipt": "delivery-receipts", "sales_invoice": "invoices", "payment": "payments"}.get(target)
             if record_id and resource:
                 record_url = base + f"{resource}/{record_id}/"

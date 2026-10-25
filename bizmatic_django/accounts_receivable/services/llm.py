@@ -3,6 +3,7 @@
 import json
 import re
 from time import perf_counter
+from typing import Any
 
 from asgiref.sync import async_to_sync
 from django.core.exceptions import ValidationError
@@ -41,7 +42,7 @@ def run(mode, configuration, purpose, system, context, route=None, response_sche
         # Include the same contract Ollama receives, including on repair requests.
         if response_schema and provider != "ollama":
             system += "\nReturn a JSON object matching this response schema:\n" + json.dumps(response_schema, separators=(",", ":"))
-        body = {"model": name, "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}], "max_tokens": tokens}
+        body: dict[str, Any] = {"model": name, "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}], "max_tokens": tokens}
         if provider == "anthropic":
             body["system"] = system
             body["messages"] = [{"role": "user", "content": content}]
@@ -57,7 +58,9 @@ def run(mode, configuration, purpose, system, context, route=None, response_sche
         if provider not in {"openai", "anthropic", "google", "ollama", "alibaba", "deepseek"} or not name:
             raise ValueError(f"Configure {prefix}_LLM_PROVIDER and its provider model.")
         result = async_to_sync(invoke_with_llm)(provider, body, config_prefix=prefix, timeout=timeout)
-        log.response_payload = result
+        log.response_payload = result if isinstance(result, dict) else {"invalid_response": result}
+        if not isinstance(result, dict):
+            raise ValueError("The accounting provider response must be a JSON object.")
         log.markdown_text = response_text(provider, result)
         if (result.get("stop_reason") == "max_tokens" or result.get("done_reason") == "length"
                 or any(row.get("finish_reason") == "length" for row in result.get("choices", []))
