@@ -20,12 +20,20 @@
     function mappingsFor(table) {
       return fields.map(field => {
         const column = field.id.startsWith('header:') && schema[table]?.columns.find(column => [field.key,sourceName(field.key)].includes(column.name));
-        return {...field,include:!!column || field.required,method:column ? 'column' : 'empty',column:column ? 'base.'+column.name : '',value:''};
+        return {...field,include:!!column || field.required,method:column ? 'column' : field.id==='line:line_no'?'number':'empty',column:column ? 'base.'+column.name : '',value:''};
       });
     }
     if (!state) state = {database:options.sources[0]?.id||'',table:suggestedTable(),keys:[],joins:[],filters:{id:'root',logic:'all',children:[]},sorts:[],distinct:false,limit:5,
       mappings:mappingsFor(suggestedTable()),section:'source',messages:[],draft:'',result:null,stale:false,confirmed:false,notice:'',mapSearch:'',mapFilter:'all',sourceRows:false};
-    state.mappings=fields.map(field=>({include:field.required,method:'empty',column:'',value:'',...field,...state.mappings?.find(item=>item.id===field.id)}));
+    function restoreMappings(saved=[]) {
+      return fields.map(field=>{
+        // Destination metadata is authoritative, including optional line fields.
+        const mapping={include:field.required,method:field.id==='line:line_no'?'number':'empty',column:'',value:'',...saved.find(item=>item.id===field.id),...field};
+        if(field.id==='line:line_no'&&(mapping.method==='sequence'||mapping.method==='column'&&!mapping.column||mapping.method==='value'&&(mapping.value===''||mapping.value==null)))mapping.method='number';
+        return mapping;
+      });
+    }
+    state.mappings=restoreMappings(state.mappings);
     state.messages ||= [];state.section ||= 'source';state.serial ||= 1;state.filters ||= {id:'root',logic:'all',children:[]};state.sorts ||= [];state.limit ||= 5;state.mapSearch ||= '';state.mapFilter ||= 'all';
     // Saved query rules omit editor identifiers. Restore them before binding the controls.
     function identifyFilters(group=state.filters, root=true) {
@@ -59,13 +67,16 @@
       }).join('');
     }
     function sourcePicker(item, kind, id, label) {
+      if(kind==='map'&&item.method==='number')return `<div><select class='form-select' aria-label='Table for ${esc(label)}' data-map-table='${id}'>${sourceOptions('@number')}<option value='@number' selected>Generate line number automatically</option><option value='@value'>Use a value I provide</option><option value='@empty'>Leave empty when unavailable</option></select><span class='qb-picker-note'>No source value is required. Numbers are generated only for actual item rows.</span></div>`;
+      if(kind==='map'&&item.method==='json')return `<div class='qb-source-picker'><div><select class='form-select' aria-label='Table for ${esc(label)}' data-map-table='${id}'>${sourceOptions('@json')}<option value='@json' selected>Field inside JSON item</option><option value='@value'>Use a value I provide</option><option value='@empty'>Leave empty</option></select></div><div><label>Item field (JSON pointer)</label><input class='form-control' aria-label='JSON path for ${esc(label)}' data-map-path='${id}' value='${esc(item.path||'')}' placeholder='/MODEL'></div></div>`;
       const alias = sourceAlias(item), value = kind==='map' && item.method!=='column' ? '@'+item.method : alias;
       const source = sources().find(source => source.id === alias);
       const manual = kind==='map' && item.method==='value', blank = kind==='map' && item.method==='empty';
-      return `<div class='qb-source-picker'><div><label for='qb-${kind}-table-${id}'>Table${kind==='map'?' or value':''}</label><select id='qb-${kind}-table-${id}' class='form-select' aria-label='Table for ${esc(label)}' data-${kind}-table='${id}'>${sourceOptions(value)}${kind==='map'?`<option value='@value'${selected(value,'@value')}>Use a value I provide</option><option value='@empty'${selected(value,'@empty')}>Leave empty when unavailable</option>`:''}</select></div><div>${manual?`<label for='qb-map-value-${id}'>Value</label><input id='qb-map-value-${id}' class='form-control' aria-label='Value for ${esc(label)}' data-map-value='${id}' value='${esc(item.value)}'>`:blank?`<span class='qb-picker-note'>This field will be left empty.</span>`:`<label for='qb-${kind}-column-${id}'>Column</label><select id='qb-${kind}-column-${id}' class='form-select' aria-label='Column for ${esc(label)}' data-${kind}-column='${id}'${source?'':' disabled'}><option value=''>${source?'Choose a column':'Choose a table first'}</option>${(source?(schema[source.table]?.columns||[]):[]).map(column=>`<option value='${alias}.${column.name}'${selected(alias+'.'+column.name,item.column)}>${esc(column.name)}</option>`).join('')}</select>`}</div></div>`;
+      return `<div class='qb-source-picker'><div><label for='qb-${kind}-table-${id}'>Table${kind==='map'?' or value':''}</label><select id='qb-${kind}-table-${id}' class='form-select' aria-label='Table for ${esc(label)}' data-${kind}-table='${id}'>${sourceOptions(value)}${kind==='map'?`<option value='@value'${selected(value,'@value')}>Use a value I provide</option><option value='@empty'${selected(value,'@empty')}>Leave empty when unavailable</option>${item.id==='line:line_no'?"<option value='@number'>Generate line number automatically</option>":''}${state.lineItems&&item.id.startsWith('line:')?"<option value='@json'>Field inside JSON item</option>":''}`:''}</select></div><div>${manual?`<label for='qb-map-value-${id}'>Value</label><input id='qb-map-value-${id}' class='form-control' aria-label='Value for ${esc(label)}' data-map-value='${id}' value='${esc(item.value)}'>`:blank?`<span class='qb-picker-note'>This field will be left empty.</span>`:`<label for='qb-${kind}-column-${id}'>Column</label><select id='qb-${kind}-column-${id}' class='form-select' aria-label='Column for ${esc(label)}' data-${kind}-column='${id}'${source?'':' disabled'}><option value=''>${source?'Choose a column':'Choose a table first'}</option>${(source?(schema[source.table]?.columns||[]):[]).map(column=>`<option value='${alias}.${column.name}'${selected(alias+'.'+column.name,item.column)}>${esc(column.name)}</option>`).join('')}</select>`}</div></div>`;
     }
     function chooseTable(item, value, mapping=false) {
       item.column=''; item.value=''; item.tableAlias='';
+      if(mapping&&['@number','@json'].includes(value)){item.method=value.slice(1);if(value==='@json')item.column=state.lineItems?.column||'';return '';}
       if (mapping) item.method=value==='@value'?'value':value==='@empty'?'empty':'column';
       if (!value || value==='@value' || value==='@empty') return '';
       if (!value.startsWith('@table:')) {item.tableAlias=value;return '';}
@@ -76,7 +87,7 @@
     }
     function chooseColumn(item,value) {item.tableAlias=sourceAlias(item);item.column=value;}
     const included = () => state.mappings.filter(field=>field.include);
-    const missing = () => included().filter(field=>field.method==='column'&&!columns().some(column=>column.ref===field.column)||field.required&&(field.method==='empty'||field.method==='value'&&!field.value));
+    const missing = () => included().filter(field=>['column','json'].includes(field.method)&&!columns().some(column=>column.ref===field.column)||field.required&&(field.method==='empty'||field.method==='value'&&!field.value));
     function dirty(message='') {api.changed();state.confirmed=false;if(state.result)state.stale=true;state.notice=message;}
     function filterRule(column='') {return {id:uid('filter'),column,tableAlias:column?column.split('.')[0]:'',operator:'eq',value:''};}
     function suggestJoin(table, from) {
@@ -120,7 +131,7 @@
         ${btn('+ Match another column','add-pair',`data-id='${join.id}'`,'btn-link')}<p class='lab-note mb-0'>Every matching pair must agree. Multiple matches can produce extra rows; the test will show them.</p></div>`;
     }
     function mappingPanel() {
-      return `<div class='qb-section-line'><p class='lab-note mb-0'>Choose a table, then a column for each field. You can use different tables and uncheck optional fields.</p>${btn('Suggest matches','suggest-map')}</div>
+      return `${destination.lineFields.length?`<section class='mb-3'><label class='qb-check'><input type='checkbox' id='qb-json-enabled'${state.lineItems?' checked':''}>Items are stored in a JSON column</label>${state.lineItems?`<label for='qb-json-column'>JSON item column</label><select class='form-select' id='qb-json-column'>${colOptions(state.lineItems.column)}</select><label for='qb-json-path' class='mt-2'>Path to item collection</label><input id='qb-json-path' class='form-control' value='${esc(state.lineItems.path||'')}' placeholder='/DATA'><p class='lab-note'>Map each item field below with a JSON pointer. Repeated items remain separate lines.</p>`:''}</section>`:''}<div class='qb-section-line'><p class='lab-note mb-0'>Choose a table, then a column for each field. All line fields are optional; leave them unchecked for records without item data.</p>${btn('Suggest matches','suggest-map')}</div>
         <div class='qb-form-grid my-3'><input id='qb-map-search' class='form-control' aria-label='Search field mappings' placeholder='Search fields or columns' value='${esc(state.mapSearch)}'><select id='qb-map-filter' class='form-select' aria-label='Show field mappings'><option value='all'${selected(state.mapFilter,'all')}>All fields (${fields.length})</option><option value='required'${selected(state.mapFilter,'required')}>Required fields</option><option value='missing'${selected(state.mapFilter,'missing')}>Needs mapping (${missing().length})</option></select></div>
         <div class='qb-mappings'>${state.mappings.map((field,index)=>`<div class='qb-map-row' data-map-row='${index}'><div><label class='qb-map-label'><input type='checkbox' data-map-include='${index}'${field.include?' checked':''}${field.required?' disabled':''}>${esc(field.label)}${field.required?'<small>Required</small>':''}</label></div><div class='qb-map-controls'>${field.include?sourcePicker(field,'map',index,field.label):"<span class='lab-note'>Not included in this query</span>"}</div></div>`).join('')}</div><p id='qb-no-mappings' class='lab-note' hidden>No fields match your search.</p>
         <details class='lab-details'><summary>Value conversions</summary>${state.mappings.filter(field=>field.include&&field.method==='column').map(field=>`<div class='qb-form-grid my-2'><label for='qb-transform-${field.id}'>${esc(field.label)}</label><select class='form-select' id='qb-transform-${field.id}' data-map-transform='${field.id}'><option value='identity'${selected(field.transform||'identity','identity')}>Automatic field conversion</option><option value='trim'${selected(field.transform,'trim')}>Trim surrounding spaces</option><option value='uppercase'${selected(field.transform,'uppercase')}>Uppercase</option><option value='json'${selected(field.transform,'json')}>Read JSON text</option></select></div>`).join('')}</details><div class='qb-next'>${btn('Continue to row filters','section',"data-section='filters'",'btn-primary')}</div>`;
@@ -162,12 +173,12 @@
       const shownHeaders=result?.headers && !state.sourceRows ? result.headers : headers;
       const shownSourceHeaders=result?.sourceHeaders && state.sourceRows ? result.sourceHeaders : shownHeaders;
       return `<section class='card qb-results' id='qb-results'><div class='finance-card-head'><div><h2>Test your query</h2><p class='lab-note mb-0'>Preview records from your database in a read-only transaction.</p></div><span class='finance-status ${result&&!state.stale&&!result.issues.length&&result.count?'success':'info'}'>${state.stale?'Changed · test again':result?'Test complete':'Not tested'}</span></div><div class='finance-card-body'>
-        <div class='qb-test-bar'><label class='qb-inline'>Preview <select class='form-select' id='qb-limit'><option value='5'${selected(state.limit,5)}>5 rows</option><option value='10'${selected(state.limit,10)}>10 rows</option><option value='25'${selected(state.limit,25)}>25 rows</option></select></label>${btn(result?'Run test again':'Test query','test-query','','btn-primary')}${result?`<span class='lab-note'>${result.count} matching row(s) · showing ${rows.length}</span>`:''}</div>
+        <div class='qb-test-bar'><label class='qb-inline'>Preview <select class='form-select' id='qb-limit'><option value='5'${selected(state.limit,5)}>5 rows</option><option value='10'${selected(state.limit,10)}>10 rows</option><option value='25'${selected(state.limit,25)}>25 rows</option></select></label>${btn(result?'Run test again':'Test query','test-query','','btn-primary')}${result?`<span class='lab-note'>${result.has_more?'More than ':''}${result.count} matching record(s) · showing ${rows.length} rows</span>`:''}</div>
         ${result?.issues.length?`<div class='finance-callout warning mt-3' role='alert'><strong>Review these details</strong><ul class='mb-0'>${result.issues.map(issue=>`<li>${esc(issue)}</li>`).join('')}</ul>${result.duplicateCount||result.issues.some(issue=>/identifier|identify each result row/.test(issue))?btn('Review row identification','review-keys','','btn-link mt-2'):''}</div>`:''}
         ${!result?`<div class='qb-empty'><span class='fas fa-table' aria-hidden='true'></span><strong>Your mapped records will appear here</strong><p>Test the selected columns, table connections, and row conditions together.</p></div>`:!rows.length?`<div class='qb-empty'><strong>${result.issues.length?'Complete the query to see rows':'No matching rows'}</strong><p>${result.issues.length?'Check the details above, then run the test again.':'Try changing or clearing the row conditions. Your setup has not been saved.'}</p>${!result.issues.length?btn('Edit row filters','section',"data-section='filters'"):''}</div>`:`<div class='qb-section-line my-3'><strong>${state.sourceRows?'Joined source rows':'Your '+esc(destination.label.toLowerCase())}</strong>${btn(state.sourceRows?'Show mapped records':'Inspect source rows','toggle-result')}</div><div class='table-responsive' tabindex='0' aria-label='Query test results'><table class='table qb-result-table'><thead><tr>${shownSourceHeaders.map(field=>`<th scope='col'>${esc(field.label)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${shownSourceHeaders.map(field=>`<td>${row[field.id]===null||row[field.id]===undefined?'<span class="text-muted">—</span>':esc(row[field.id])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`}
-        ${rowIdentityPanel()}<div class='qb-review-bar'><p class='lab-note mb-0'>${state.confirmed?'Configuration saved and activated.':'Review the result, then confirm and save the configuration. Testing never imports accounting records.'}</p>${btn('Review & save','review-query',canConfirm()?'':'disabled','btn-primary')}</div></div></section>`;
+        ${rowIdentityPanel()}<div class='qb-review-bar'><p class='lab-note mb-0'>${state.confirmed?'Migration completed and configuration saved.':'After testing, review every matching record. Migration and saving are available only after the full result has no errors.'}</p>${btn('Review full migration','review-query',canConfirm()?'':'disabled','btn-primary')}</div></div></section>`;
     }
-    function canConfirm() {return state.result&&!state.stale&&!state.result.issues.length&&state.result.count>0&&api.hasReceipt()&&!state.confirmed;}
+    function canConfirm() {return state.result&&!state.stale&&api.hasMigrationReceipt()&&!state.confirmed;}
     function render() {
       const active = root.contains(document.activeElement) ? document.activeElement : null;
       const focusSelector = active?.id ? '#' + CSS.escape(active.id) : active?.getAttribute('aria-label') ? '[aria-label="' + CSS.escape(active.getAttribute('aria-label')) + '"]' : active?.dataset.qaction ? '[data-qaction="' + active.dataset.qaction + '"]' + (active.dataset.section ? '[data-section="' + active.dataset.section + '"]' : '') : null;
@@ -198,15 +209,17 @@
     }
     async function applyMessage(text){
       if(!text.trim())return;
-      try{const response=await api.chat(text);Object.assign(state,response.record.setup_data.database);identifyFilters();state.mappings=fields.map(field=>({include:field.required,method:'empty',column:'',value:'',...field,...state.mappings.find(item=>item.id===field.id)}));state.messages.push({role:'user',text},{role:'assistant',text:response.message});state.draft='';if(response.changed)dirty('Assistant changes are visible. Run a new test before saving.');render();}catch(error){api.error(error);}
+      try{const response=await api.chat(text);Object.assign(state,response.record.setup_data.database);identifyFilters();state.mappings=restoreMappings(state.mappings);state.messages.push({role:'user',text},{role:'assistant',text:response.message});state.draft='';if(response.changed)dirty('Assistant changes are visible. Run a new test before saving.');render();}catch(error){api.error(error);}
     }
-    async function review(){if(canConfirm()){try{if(await api.review(true)){state.confirmed=true;state.notice='Configuration saved and activated.';render();}}catch(error){api.error(error);}}}
+    async function review(){if(canConfirm()){try{if(await api.review(true)){state.confirmed=true;state.notice='Migration completed and configuration saved.';render();}}catch(error){api.error(error);}}}
     root.addEventListener('input',event=>{
       const el=event.target;
       if(el.id==='qb-message')state.draft=el.value;
       if(el.id==='qb-map-search'){state.mapSearch=el.value;filterMappings();}
       if(el.id==='qb-column-search')root.querySelectorAll('[data-column-search]').forEach(row=>{row.hidden=!row.dataset.columnSearch.includes(el.value.toLowerCase());});
       if(el.dataset.filterValue){findRule(el.dataset.filterValue).value=el.value;dirty();invalidateButtons();}
+      if(el.dataset.mapPath!==undefined){state.mappings[Number(el.dataset.mapPath)].path=el.value;dirty();invalidateButtons();}
+      if(el.id==='qb-json-path'){state.lineItems.path=el.value;dirty();invalidateButtons();}
       if(el.dataset.mapValue!==undefined){state.mappings[Number(el.dataset.mapValue)].value=el.value;dirty();invalidateButtons();}
     });
     function invalidateButtons(){root.querySelectorAll('[data-qaction="review-query"]').forEach(button=>button.disabled=true);const badge=root.querySelector('#qb-results .finance-status');if(badge&&state.result){badge.textContent='Changed · test again';badge.className='finance-status info';}}
@@ -216,7 +229,13 @@
         state.database=el.value;schema=sourceSchema(options.sources,state.database);state.table=suggestedTable();
         state.joins=[];state.keyMode='auto';state.keyFields=[];state.keyEditor=false;syncKeys();state.filters.children=[];state.sorts=[];state.mappings=mappingsFor(state.table);state.result=null;dirty('Source changed. Mappings were suggested again; related tables and row conditions were cleared.');render();return;
       }
-      if(data.keyTable!==undefined)notice=chooseTable(state.keyFields[Number(data.keyTable)],el.value);
+      if(el.id==='qb-json-enabled'){
+        state.lineItems=el.checked?{column:columns().find(column=>/json/i.test(column.formatted_type||''))?.ref||'',path:''}:null;
+        if(!el.checked)state.mappings.filter(field=>field.method==='json').forEach(field=>{field.method='empty';field.column='';});
+      }
+      else if(el.id==='qb-json-column'){state.lineItems.column=el.value;state.mappings.filter(field=>field.method==='json').forEach(field=>field.column=el.value);}
+      else if(el.id==='qb-json-path')state.lineItems.path=el.value;
+      else if(data.keyTable!==undefined)notice=chooseTable(state.keyFields[Number(data.keyTable)],el.value);
       else if(data.keyColumn!==undefined)chooseColumn(state.keyFields[Number(data.keyColumn)],el.value);
       else if(data.joinTable){const join=state.joins.find(join=>join.id===data.joinTable);join.table=el.value;join.auto=false;join.on=[{left:'',right:''}];const clear=item=>{if(sourceAlias(item)===join.id){item.column='';item.value='';item.tableAlias=join.id;}};state.mappings.forEach(clear);state.sorts.forEach(clear);state.keyFields.forEach(clear);const visit=group=>group.children.forEach(rule=>rule.children?visit(rule):clear(rule));visit(state.filters);cleanReferences();}
       else if(data.joinType){const join=state.joins.find(join=>join.id===data.joinType);join.auto=false;join.type=el.value;}

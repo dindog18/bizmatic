@@ -41,6 +41,7 @@ def validate(record, mode, submit=False):
     rules = record.encoding_rules
     if not isinstance(rules, dict) or not isinstance(record.relation_lookups, dict):
         raise ValidationError("Encoding rules and account lookups must be objects.")
+    rules['line_required_fields'] = []
     for name, allowed in [("required_fields", header), ("line_required_fields", line_fields)]:
         values = rules.get(name, [])
         if not isinstance(values, list) or any(not isinstance(v, str) for v in values) or set(values) - allowed:
@@ -64,8 +65,8 @@ def validate(record, mode, submit=False):
         validate_setup(record, mode, submit)
         return
     if record.source_type == "document":
-        if submit and (not record.document_type.strip() or not record.extraction_context.strip() or (line_fields and not record.line_item_context.strip())):
-            raise ValidationError("Provide the document type, extraction instructions, and line instructions where applicable.")
+        if submit and (not record.document_type.strip() or not record.extraction_context.strip()):
+            raise ValidationError("Provide the document type and extraction instructions.")
         record.source_schema_snapshot = {}
         return
     if record.database_source_id and not record.database_source.enabled:
@@ -108,8 +109,6 @@ def validate(record, mode, submit=False):
                 raise ValidationError("Line joins must use columns from the selected tables.")
         if submit and record.line_source_table_id and not record.line_join_fields:
             raise ValidationError("Provide header-to-line joins.")
-        if submit and line_fields and not record.line_source_table_id:
-            raise ValidationError("Select a line table for this record type.")
     elif submit:
         raise ValidationError("Select a database connection and header table.")
 
@@ -157,3 +156,27 @@ def save(mode, data, record_id=None, submit=False, user=None):
         record.submitted_snapshot = {"configuration": snapshot(record)}
     record.save()
     return record
+
+
+@transaction.atomic
+def delete(mode, record_id, data):
+    """Delete only the setup; retain accounting evidence and historical attempts."""
+    from db_extraction.models import DatabaseSource
+    Config = model(mode, 'ExtractionConfiguration')
+    source_id = Config.objects.filter(pk=record_id).values_list('database_source_id', flat=True).first()
+    # Use the same lock order as database migration/update commits.
+    if source_id:
+        DatabaseSource.objects.select_for_update().only('pk').get(pk=source_id)
+    record = get_object_or_404(Config.objects.select_for_update(), pk=record_id)
+    if data.get('confirmed') is not True:
+        raise ValidationError('Confirm the configuration deletion first.')
+    if data.get('revision') != record.revision or record.database_source_id != source_id:
+        raise ValidationError('This configuration changed. Reload and review it before deleting.', code='conflict')
+    if record.import_runs.filter(status='processing').exists() or record.llm_logs.filter(status='processing').exists():
+        raise ValidationError('An operation is still running for this configuration. Wait for it to finish before deleting.')
+    # Older attempts may have no snapshot. Preserve the setup before detaching
+    # these references; existing nonempty historical snapshots stay as recorded.
+    original = snapshot(record)
+    record.import_runs.filter(configuration_snapshot={}).update(configuration_snapshot=original)
+    record.llm_logs.filter(configuration_snapshot={}).update(configuration_snapshot=original)
+    record.delete()

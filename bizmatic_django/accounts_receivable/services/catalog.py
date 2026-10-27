@@ -43,6 +43,8 @@ def fields(mode, target, lines=False):
 
 def required_fields(mode, target, lines=False):
     """One source of mandatory fields for setup guidance, imports and extraction."""
+    if lines:
+        return set()  # Items and their source fields are optional; IDs are generated.
     required = {field.name for field in fields(mode, target, lines)
                 if not field.blank and not field.null and not field.has_default()}
     if not lines and target not in {'customer', 'supplier'}:

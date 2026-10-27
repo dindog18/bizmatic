@@ -127,3 +127,14 @@
 .config-field-reference td { white-space:normal; max-width:340px; overflow-wrap:anywhere; }
 .config-field-reference h3 { font-size:.85rem; margin:1rem 0 .5rem; }
 @media(max-width:575px) { .config-selection-options .btn { flex:1 1 45%; } .config-session-bar .finance-actions { gap:.5rem; } }
+/* Give editing and destructive actions separate, predictable click targets. */
+.config-actions-heading,
+.finance-table td.config-actions-cell { text-align:right; white-space:nowrap; }
+.config-row-actions { display:inline-flex; align-items:center; justify-content:flex-end; gap:.75rem; }
+#page-content .finance-workspace .config-row-actions .btn { display:inline-flex; align-items:center; justify-content:center; gap:.5rem; min-height:44px; padding:.5rem .85rem; font-size:.8125rem; font-weight:500; white-space:nowrap; }
+.config-row-actions .btn:focus-visible { outline:3px solid currentColor; outline-offset:3px; }
+.config-action-divider { width:1px; height:1.5rem; background:var(--biz-color-border-subtle); flex-shrink:0; }
+@media (max-width:575.98px) {
+  .config-row-actions { flex-direction:column; align-items:stretch; gap:.5rem; }
+  .config-action-divider { display:none; }
+}

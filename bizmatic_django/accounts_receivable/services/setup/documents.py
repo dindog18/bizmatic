@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from .. import llm
 from ..assistant import attempt_error
 from ..catalog import fields
-from ..extraction import SYSTEM, definition, convert
+from ..extraction import SYSTEM, definition, convert, normalize_lines
 from .context import field_catalog
 from .configuration import clean_output
 
@@ -19,8 +19,12 @@ def validate_annotations(mode, target, document, complete=False):
     allowed = {field['id']: field for field in field_catalog(mode, target)}
     if not isinstance(rules, dict) or set(rules) - set(allowed):
         raise ValidationError('Use only fields from this record type.')
+    for key in allowed:
+        if key.startswith('line:') and (key not in rules or isinstance(rules[key], dict) and rules[key].get('method') == 'unmapped'):
+            rules[key] = {'method':'empty'}
+    document['rules'] = rules
     if complete and (not text.strip() or set(rules) != set(allowed)):
-        raise ValidationError('Provide sample text and a rule for every header and line field.')
+        raise ValidationError('Provide sample text and rules for the header fields. All line fields are optional.')
     for key, rule in rules.items():
         if not isinstance(rule, dict) or rule.get('method') not in {'extract', 'constant', 'empty', 'unmapped', 'instruction'}:
             raise ValidationError('Choose a supported rule for '+allowed[key]['label']+'.')
@@ -47,6 +51,8 @@ def validate_annotations(mode, target, document, complete=False):
 
 
 def output_schema(mode, target):
+    # Strict providers require property names in "required"; nullable field
+    # values and an empty lines array still represent wholly optional item data.
     def record(lines=False):
         return {'type': 'object', 'properties': {field['name']: {'type': ['string', 'number', 'boolean', 'null']} for field in definition(mode, target, lines)},
                 'required': [field['name'] for field in definition(mode, target, lines)], 'additionalProperties': False}
@@ -62,6 +68,7 @@ def generate(mode, record):
 Return JSON with one key, prompt. The prompt must cover EVERY header and line field.
 Document annotations are examples of WHERE to read values, never constants to repeat on new documents.
 Use document labels and context to recognize values across layouts. For line fields repeat the rule for every item row.
+All line fields are optional. If no item data exists, return lines: [] and report no missing-line error. Never create a placeholder row.
 Only a rule whose method is constant authorizes a fixed value; empty rules produce null.
 Instruction rules describe how to extract or derive a value, such as numbering item rows from 1. Preserve identifiers, phone numbers and tax IDs as strings.
 Require missing required values and ambiguous account matches to be reported in issues.
@@ -121,17 +128,24 @@ def test(mode, record, text, expected):
         'line_fields': definition(mode, record.target_entity, True) if record.target_entity in {'purchase_order', 'delivery_receipt', 'sales_invoice'} else [],
         'document_text': text}
     # Expected answers are deliberately excluded from the model request.
-    log, result = llm.run(mode, record, 'configuration', SYSTEM+'\nApply the supplied extraction_context and field_rules. Return every destination field, with null for explicit empty rules. Never copy the training example values.', context, response_schema=output_schema(mode, record.target_entity))
+    log, result = llm.run(mode, record, 'configuration', SYSTEM+'\nApply the supplied extraction_context and field_rules. Return null for explicit empty rules. Return lines: [] when no item data exists, even when line-field rules are configured. Never copy the training example values.', context, response_schema=output_schema(mode, record.target_entity))
     if result is None:
         raise attempt_error(log.error_message, log)
     try:
         issues = clean_output(mode, record, result)
+        has_item_data = bool(normalize_lines(mode, record, result.get('lines', []))) if record.target_entity in {'purchase_order', 'delivery_receipt', 'sales_invoice'} else False
+        if not has_item_data:
+            result['lines'] = []
         rows = []
         for field in field_catalog(mode, record.target_entity):
             key, group = field['key'], field['group']
             values = result['record'] if group == 'header' else (result.get('lines') or [{}])[0]
             actual = values.get(key)
             rule = document['rules'][field['id']]
+            if group == 'line' and not has_item_data:
+                rows.append({'key':field['id'], 'label':'Line · '+field['label'], 'required':False,
+                             'value':None, 'expected':None, 'hasExpected':True, 'status':'passed', 'issue':''})
+                continue
             has_expected = field['id'] in expected or rule['method'] in {'empty', 'constant'}
             wanted = expected.get(field['id'], rule.get('value') if rule['method'] == 'constant' else None)
             issue = ''
@@ -144,13 +158,15 @@ def test(mode, record, text, expected):
                         raise ValidationError('This field must be null under its empty-field rule.')
                     if rule['method'] == 'constant' and expected_value(model_field, value, record, canonical=True) != expected_value(model_field, rule['value'], record):
                         raise ValidationError('Result does not match the approved value.')
+                if not has_expected and group == 'line' and actual in (None, ''):
+                    has_expected, wanted = True, None
                 if not has_expected:
                     raise ValidationError('Enter the expected value to verify this mapping.')
                 converted = expected_value(model_field, actual, record, canonical=True)
                 target = expected_value(model_field, wanted, record)
                 if converted != target:
                     raise ValidationError('Result does not match the expected value.')
-                if rule['method'] == 'extract' and (actual is None or actual == ''):
+                if rule['method'] == 'extract' and (actual is None or actual == '') and group != 'line':
                     raise ValidationError('The mapped value was not found.')
             except (ValidationError, ValueError, TypeError) as error:
                 issue = '; '.join(error.messages) if isinstance(error, ValidationError) else 'Correct the expected value or formatting rule.'

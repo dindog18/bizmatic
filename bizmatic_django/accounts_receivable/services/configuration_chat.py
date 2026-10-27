@@ -130,8 +130,6 @@ def setup_context(mode, data, record_id=None):
     available = sources() if database else {'sources': [], 'tables': []}
     parameters = ['name', 'account scope', 'formatting and review rules']
     parameters += ['database_source', 'source_table', 'source_key_fields', 'field_mappings'] if database else ['document_type', 'extraction_context']
-    if target['lineModel']:
-        parameters += ['line_source_table', 'line_join_fields', 'line_item_mappings'] if database else ['line_item_context']
     return {'selection': selection, 'catalog': [target], 'parameters': parameters,
             'features': ['Account lookup by code, name or tax ID', 'Missing values require review'] if any(field['type'] == 'lookup' for field in target['fields']) else ['Create master records from extracted fields', 'Missing values require review'],
             **available}

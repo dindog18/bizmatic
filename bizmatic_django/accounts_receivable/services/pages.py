@@ -80,6 +80,7 @@ def document(row, target, mode):
 
 def configuration(row, mode):
     values = snapshot(row)
+    values['encoding_rules'] = {**values['encoding_rules'], 'line_required_fields': []}
     source = row.source_schema_snapshot
     return {**values, "id": row.pk, "scope": str(getattr(row, party_key(mode)+"_id") or "module"),
             "connection": source.get("connection", ""), "table": source.get("header_table", ""),
@@ -94,7 +95,7 @@ def configuration(row, mode):
 def llm_log(row):
     result = {field.name: field.value_from_object(row) for field in row._meta.fields}
     result["revision"] = row.updated_at.isoformat()
-    result["preview_reference"] = {"record_label": row.configuration.name if row.configuration_id else row.target_entity,
+    result["preview_reference"] = {"record_label": row.configuration.name if row.configuration_id else row.configuration_snapshot.get('name', row.target_entity),
                                    "source_name": row.fk_document_no.file_name if row.fk_document_no_id else "Configuration"}
     return result
 

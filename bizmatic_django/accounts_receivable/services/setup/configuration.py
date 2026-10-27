@@ -23,7 +23,7 @@ def validate_setup(record, mode, submit=False):
             group, name = key.split(':', 1)
             (record.line_field_instructions if group == 'line' else record.field_instructions)[name] = json.dumps(rule, ensure_ascii=False)
         if record.target_entity in {'purchase_order', 'delivery_receipt', 'sales_invoice'}:
-            record.line_item_context = document.get('line_context') or 'Extract every item row; apply line annotations to repeated rows. Exclude totals and summary rows.'
+            record.line_item_context = document.get('line_context') or 'Extract item rows when present; otherwise return lines: []. Every line field is optional. Exclude totals and summary rows.'
         if submit and not record.extraction_context.strip():
             raise ValidationError('Generate or enter the extraction prompt before submitting.')
         record.source_schema_snapshot = {}
@@ -35,7 +35,7 @@ def validate_setup(record, mode, submit=False):
         metadata = validate_query(mode, record, query, complete=submit)
         if metadata:
             record.source_table = metadata['tables']['base']
-            record.source_key_fields = [reference.removeprefix('base.') for reference in query.get('keys', [])]
+            record.source_key_fields = metadata.get('key_names', [reference.removeprefix('base.') for reference in query.get('keys', [])])
             record.field_mappings = {}
             record.line_item_mappings = {}
             for mapping in query.get('mappings', []):
@@ -50,22 +50,24 @@ def validate_setup(record, mode, submit=False):
 
 def clean_output(mode, config, result):
     """Validate types, account lookups and required values without creating accounting records."""
-    from ..extraction import values_for, validate_totals
+    from ..extraction import normalize_lines, values_for, validate_totals
     issues = []
-    if not isinstance(result, dict) or set(result) - {'record', 'lines', 'issues'} or not isinstance(result.get('record'), dict) or not isinstance(result.get('lines', []), list) or not isinstance(result.get('issues', []), list):
+    if not isinstance(result, dict) or set(result) - {'record', 'lines', 'issues'} or not isinstance(result.get('record'), dict) or not isinstance(result.get('issues', []), list):
         raise ValidationError('Expected record, lines, and issues from extraction.')
+    raw_lines = result.get('lines') if result.get('lines') is not None else []
+    if not isinstance(raw_lines, list):
+        raise ValidationError('Line items must be an array; use [] when there are none.')
     issues.extend(str(issue) for issue in result.get('issues', []))
     has_lines = config.target_entity in {'purchase_order', 'delivery_receipt', 'sales_invoice'}
-    if has_lines and not result.get('lines'):
-        issues.append('At least one line item is required.')
-    if not has_lines and result.get('lines'):
+    if not has_lines and raw_lines:
         issues.append('This record type does not have line items.')
-    if len(result.get('lines', [])) > 1000:
+    if len(raw_lines) > 1000:
         raise ValidationError('A record exceeds 1,000 line items.')
-    if any(not isinstance(row, dict) for row in result.get('lines', [])):
+    if any(not isinstance(row, dict) for row in raw_lines):
         raise ValidationError('Each line item must be an object containing its field values.')
     converted_rows = []
-    line_rows = [(row, True) for row in result.get('lines', [])] if has_lines else []
+    normalized = normalize_lines(mode, config, raw_lines) if has_lines else []
+    line_rows = [(row, True) for row in normalized]
     for values, is_line in [(result['record'], False), *line_rows]:
         try:
             converted = values_for(mode, config, values, lines=is_line, canonical=config.source_type == 'document')
@@ -90,7 +92,7 @@ def clean_output(mode, config, result):
                 numbers = [line.line_no for line in line_records]
                 if len(set(numbers)) != len(numbers):
                     raise ValidationError('Line numbers must be unique within a record.')
-            validate_totals(config.target_entity, header, line_records)
+            validate_totals(config.target_entity, header, line_records, header_values=result['record'], line_values=normalized)
         except (ValidationError, ValueError, TypeError) as error:
             issues.extend(error.messages if isinstance(error, ValidationError) else [str(error)])
     return list(dict.fromkeys(issues))

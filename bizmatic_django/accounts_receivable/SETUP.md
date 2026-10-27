@@ -45,14 +45,15 @@ Tests show 5, 10 or 25 mapped records and selected source columns/identifiers. R
 ## Save protocol
 
 - `setup-context`: catalog, source schema and extracted-document choices; `inspect_source` explicitly refreshes a schema.
+- `setup-preview`: preview a prefix of the ordered database transformation recipe with source-side pagination, independently of accounting field matches; see [QUERY_BUILDER.md](QUERY_BUILDER.md).
 - `setup-document`: read a chosen `text:ID` or `llm:ID` extraction without changing it.
 - `setup-chat`: unsaved guide changes and conversation through the setup provider.
 - `setup-generate`: create the document prompt from the current annotations.
 - `setup-test`: execute the current document/query test and return a signed `test_token` only on success.
 - `setup-review`: validate the exact current configuration and issue a `confirmation_token`. Activation requires a current passing test; a draft does not.
-- `setup-save`: require explicit confirmation and the matching review token; activation also rechecks the passing-test token.
+- `setup-save`: document setup requires explicit confirmation and the matching review token; database setups use the full migration endpoints described in [DATABASE_MIGRATION.md](DATABASE_MIGRATION.md).
 
-Test receipts bind the module, configuration ID/revision, user, source-connection revision and exact normalized configuration. They expire after 30 minutes. Changed fields, source choices or stale revisions require another test/review. Saving increments the revision and preserves the submitted snapshot. No accounting records are created by generation, testing, chat or saving a configuration. Importing is a separate explicit action on an activated saved profile.
+Test receipts bind the module, configuration ID/revision, user, source-connection revision and exact normalized configuration. They expire after 30 minutes. Changed fields, source choices or stale revisions require another test/review. Saving increments the revision and preserves the submitted snapshot. Document setup does not create accounting records while saving. Database setup now requires a full migration review and commits the configuration and all mapped accounting records together. Saved database setups use Update data for subsequent full reviews and atomic updates. See [Database migration and updates](DATABASE_MIGRATION.md).
 
 ## Verification
 

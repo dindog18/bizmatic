@@ -54,8 +54,9 @@
     const used = new Set(['base']);
     const use = reference => {if(reference)used.add(reference.split('.')[0]);};
     query.keys.forEach(use);
+    if(query.lineItems?.column)use(query.lineItems.column);
     if (query.keyMode === 'custom') (query.keyFields || []).forEach(field => use(field.column || field.tableAlias));
-    query.mappings.filter(field => field.include && field.method === 'column').forEach(field => use(field.column || field.tableAlias));
+    query.mappings.filter(field => field.include && ['column','json'].includes(field.method)).forEach(field => use(field.column || field.tableAlias));
     const visit = group => group.children.forEach(rule => rule.children ? visit(rule) : use(rule.column || rule.tableAlias));
     visit(query.filters);
     query.sorts.forEach(sort => use(sort.column || sort.tableAlias));

@@ -63,10 +63,10 @@
   const empty = (title, description, action = '') => `<div class="finance-empty"><span class="empty-icon">${icon('search')}</span><h2>${esc(title)}</h2><p>${esc(description)}</p>${action}</div>`;
 
   function extractionActions() {
-    return `<details class="finance-source-menu"><summary class="btn btn-primary">${icon('file-import')}Import records ${icon('chevron-down')}</summary><div class="finance-source-options">${button(config.sources.documents, 'Document extraction', false, 'file-alt')}${button(config.sources.databases, 'Database extraction', false, 'database')}${button(config.routes.configuration, 'Configure extraction', false, 'sliders-h')}</div></details>`;
+    return `<details class="finance-source-menu"><summary class="btn btn-primary">${icon('file-import')}Import records ${icon('chevron-down')}</summary><div class="finance-source-options">${button(config.sources.documents, 'Document extraction', false, 'file-alt')}${button(config.routes.configuration, 'Database setup & updates', false, 'database')}${button(config.routes.configuration, 'Configure extraction', false, 'sliders-h')}</div></details>`;
   }
   function extractionNotice() {
-    return `<details class="finance-callout"><summary>Records from extraction</summary><div class="mt-2">Purchase orders, delivery receipts, sales invoices, and payments come from database extraction or document extraction. Review their source and extraction history to check record details. Retries do not overwrite existing accounting records.</div></details>`;
+    return `<details class="finance-callout"><summary>Records from extraction</summary><div class="mt-2">Purchase orders, delivery receipts, sales invoices, and payments come from database extraction or document extraction. Review their source and extraction history to check record details. Database updates require a full review before changing existing accounting records.</div></details>`;
   }
   function sourceURL(record) {
     return record.sourceUrl || config.sources.documents;

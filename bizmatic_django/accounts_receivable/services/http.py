@@ -3,12 +3,12 @@
 import json
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
-from . import assistant, configuration_chat, imports, pages, records
+from . import assistant, configuration, configuration_chat, pages, records
 from .catalog import model
 
 
@@ -17,6 +17,9 @@ def perform(request, mode, action, record_id=None):
         data = json.loads(request.body)
         if not isinstance(data, dict):
             raise ValidationError("Expected a JSON object.")
+        if action == 'configuration-delete' and record_id:
+            configuration.delete(mode, record_id, data)
+            return JsonResponse({'deleted':True, 'id':record_id})
         if action.startswith("setup-"):
             from .setup.actions import perform as setup_action
             return JsonResponse(setup_action(request, mode, action, data, record_id))
@@ -48,6 +51,10 @@ def perform(request, mode, action, record_id=None):
             return JsonResponse(configuration_chat.review(mode, data, record_id, request.user))
         if action in {"configuration", "submit"}:
             data["submit"] = action == "submit"
+            values = data.get('configuration', {})
+            saved = model(mode, 'ExtractionConfiguration').objects.filter(pk=record_id).first() if record_id else None
+            if values.get('source_type') == 'database' or saved and saved.source_type == 'database':
+                raise ValidationError('Open the database setup and review the full migration before saving.')
             with transaction.atomic():
                 record = configuration_chat.confirm(mode, data, record_id, request.user)
             return JsonResponse({"record": pages.configuration(record, mode)})
@@ -55,8 +62,7 @@ def perform(request, mode, action, record_id=None):
             record = assistant.propose(mode, record_id, data)
             return JsonResponse({"record": pages.configuration(record, mode), "llm_log_no": record.assistant_proposal["llm_log_no"]})
         if action == "import" and record_id:
-            run = imports.execute(mode, record_id, data)
-            return JsonResponse({"id": run.pk, "status": run.status, "result": run.result})
+            raise ValidationError('Open the saved extraction setup and use Update data. The full result must pass review before any rows are updated.')
         if action == "accuracy" and record_id:
             with transaction.atomic():
                 log = get_object_or_404(model(mode, "LLMExtractionLog").objects.select_for_update(), pk=record_id)
@@ -78,3 +84,5 @@ def perform(request, mode, action, record_id=None):
         return JsonResponse(result, status=409 if getattr(error, "code", None) == "conflict" else 400)
     except IntegrityError:
         return JsonResponse({"message": "A conflicting record already exists. Reload and check its reference or source."}, status=409)
+    except DatabaseError:
+        return JsonResponse({'message':'The accounting database could not complete this operation. No partial migration or update was committed. Reload and review again.'}, status=503)

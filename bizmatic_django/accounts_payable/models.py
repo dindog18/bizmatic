@@ -1222,7 +1222,7 @@ class LLMExtractionLog(models.Model):
 
     llm_log_no = models.AutoField(primary_key=True)
     configuration = models.ForeignKey(
-        "ExtractionConfiguration", on_delete=models.PROTECT, null=True,
+        "ExtractionConfiguration", on_delete=models.SET_NULL, null=True,
         blank=True, related_name="llm_logs",
     )
     routing_route = models.ForeignKey(
@@ -1296,9 +1296,9 @@ class LLMExtractionLog(models.Model):
 
 
 class DatabaseImportRun(models.Model):
-    """One explicit, bounded import from a submitted database configuration."""
+    """Audit history for committed database migrations, updates and legacy imports."""
 
-    configuration = models.ForeignKey(ExtractionConfiguration, on_delete=models.PROTECT, related_name="import_runs")
+    configuration = models.ForeignKey(ExtractionConfiguration, on_delete=models.SET_NULL, null=True, blank=True, related_name="import_runs")
     request_id = models.UUIDField(unique=True)
     configuration_snapshot = models.JSONField(default=dict)
     status = models.CharField(max_length=20, default="processing")

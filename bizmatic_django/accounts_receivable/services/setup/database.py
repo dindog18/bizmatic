@@ -1,12 +1,13 @@
-"""Compile reviewed table/column choices into bounded, parameterized read-only PostgreSQL queries."""
+"""Compile reviewed mappings into read-only PostgreSQL previews and streamed migrations."""
 import json
 import re
+from itertools import groupby, islice
 from collections import OrderedDict
 
 import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
 
 from db_extraction.models import DatabaseSource, DatabaseTable
@@ -26,6 +27,9 @@ def primary_keys(table):
 def validate_query(mode, record, query, complete=False):
     if not isinstance(query, dict):
         raise ValidationError('Provide a structured database query.')
+    if 'pipeline' in query:
+        from .pipeline import validate
+        return validate(mode, record, query, complete)
     source_id = query.get('database')
     if not source_id:
         if complete:
@@ -85,15 +89,26 @@ def validate_query(mode, record, query, complete=False):
         raise ValidationError('Map each destination field only once.')
     mapped = {}
     for item in mappings:
-        if item.get('id') not in allowed or item.get('method') not in {'column', 'value', 'empty'} or type(item.get('include')) is not bool:
+        # Older saved setups called automatic line numbering "sequence". Normalize
+        # even excluded fields, which still pass through mapping validation.
+        if item.get('id') == 'line:line_no':
+            if (item.get('method') == 'sequence'
+                    or item.get('method') == 'column' and not item.get('column')
+                    or item.get('method') == 'value' and item.get('value') in ('', None)):
+                item['method'] = 'number'
+        if item.get('id') not in allowed or item.get('method') not in {'column', 'value', 'empty', 'json', 'number'} or type(item.get('include')) is not bool:
             raise ValidationError('Choose supported destination fields and mapping methods.')
         if item.get('transform', 'identity') not in {'identity', 'trim', 'uppercase', 'json', 'date', 'datetime', 'decimal', 'integer', 'boolean', 'lookup'}:
             raise ValidationError('Choose a supported value conversion.')
         mapped[item['id']] = item
         if not item['include']:
             continue
-        if item['method'] == 'column' and (item.get('column') or complete):
+        if item['method'] in {'column', 'json'} and (item.get('column') or complete):
             validate_reference(item.get('column'), columns)
+        if item['method'] == 'number' and item['id'] != 'line:line_no':
+            raise ValidationError('Automatic numbering is available only for line numbers.')
+        if item['method'] == 'json':
+            json_path({}, item.get('path', ''), missing=True)
         if item['method'] == 'value' and not isinstance(item.get('value'), (str, int, float, bool, type(None))):
             raise ValidationError('Approved values must be scalar values.')
     if complete:
@@ -103,6 +118,14 @@ def validate_query(mode, record, query, complete=False):
                 raise ValidationError('Map required field '+field['label']+'.')
         if not any(item.get('include') for item in mappings):
             raise ValidationError('Include at least one output field.')
+    collection = query.get('lineItems')
+    if collection:
+        if not isinstance(collection, dict):
+            raise ValidationError('Choose a JSON column for line items.')
+        validate_reference(collection.get('column'), columns)
+        json_path({}, collection.get('path', ''), missing=True)
+        if any(mapping['include'] and mapping['method'] == 'json' and mapping['id'].startswith('line:') and mapping.get('column') != collection['column'] for mapping in mappings):
+            raise ValidationError('JSON line fields must use the selected item collection column.')
     check_group(query.get('filters', {'logic': 'all', 'children': []}), columns, complete)
     if not isinstance(query.get('sorts', []), list):
         raise ValidationError('Sorting must be a list.')
@@ -174,12 +197,17 @@ def where_sql(group, params):
     return sql.SQL('({})').format(sql.SQL(' AND ' if group['logic'] == 'all' else ' OR ').join(parts)) if parts else sql.SQL('TRUE')
 
 
-def compile_query(query, metadata):
+def compile_query(query, metadata, bounded=True):
     """Only server-validated metadata identifiers enter SQL; user values stay parameters."""
+    if metadata.get('pipeline'):
+        from .pipeline import compile_query as compile_pipeline
+        return compile_pipeline(query, metadata, bounded=bounded, limit=MAX_ROWS)
     tables, needed = metadata['tables'], set(metadata['keys'])
     for mapping in query['mappings']:
-        if mapping['include'] and mapping['method'] == 'column':
+        if mapping['include'] and mapping['method'] in {'column', 'json'}:
             needed.add(mapping['column'])
+    if query.get('lineItems'):
+        needed.add(query['lineItems']['column'])
     line_aliases = {item['column'].split('.', 1)[0] for item in query['mappings'] if item['include'] and item['method'] == 'column' and item['id'].startswith('line:')}
     line_keys = [alias+'.'+key for alias in sorted(line_aliases) for key in primary_keys(tables[alias])]
     if line_aliases and any(not primary_keys(tables[alias]) for alias in line_aliases):
@@ -194,9 +222,12 @@ def compile_query(query, metadata):
     params = []
     statement += sql.SQL(' WHERE {}').format(where_sql(query.get('filters', {'logic': 'all', 'children': []}), params))
     sorts = [sql.SQL('{} {} NULLS LAST').format(reference_sql(item['column']), sql.SQL(item['direction'].upper())) for item in query.get('sorts', [])]
-    sorts += [reference_sql(ref) for ref in metadata['keys']+line_keys]
-    statement += sql.SQL(' ORDER BY {} LIMIT %s').format(sql.SQL(', ').join(sorts))
-    params.append(MAX_ROWS+1)
+    # A complete record must remain contiguous while a large result is streamed.
+    sorts = [reference_sql(ref) for ref in metadata['keys']] + sorts + [reference_sql(ref) for ref in line_keys]
+    statement += sql.SQL(' ORDER BY {}').format(sql.SQL(', ').join(sorts))
+    if bounded:
+        statement += sql.SQL(' LIMIT %s')
+        params.append(MAX_ROWS+1)
     return statement, params, line_keys
 
 
@@ -213,19 +244,79 @@ def fetch(query, metadata):
     return rows, line_keys
 
 
+def json_path(value, path, missing=False, optional=False):
+    if not isinstance(path, str) or path and not path.startswith('/') or len(path) > 1000 or len(path.split('/')) > 33 or re.search(r'~(?![01])', path):
+        raise ValidationError('Use a valid JSON pointer, such as /DATA or /MODEL.')
+    if missing:
+        return None
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            raise ValidationError('The source value is not valid JSON. Choose a conversion or correct the source.') from None
+    for part in path.split('/')[1:] if path else []:
+        part = part.replace('~1', '/').replace('~0', '~')
+        try:
+            value = value[int(part)] if isinstance(value, list) and part.isdecimal() else value[part]
+        except (KeyError, IndexError, TypeError):
+            if optional:
+                return None
+            raise ValidationError('JSON field '+path+' is missing. Correct its mapping.') from None
+    return value
+
+
+def item_rows(value, path):
+    if value is None or value == '' or isinstance(value, str) and not value.strip():
+        return []
+    value = json_path(value, '')
+    if value is None or value == '' or value == {} or value == []:
+        return []
+    value = json_path(value, path)
+    if value is None or value == '' or value == {}:
+        return []
+    if isinstance(value, dict) and len(value) == 1 and isinstance(next(iter(value.values())), list):
+        value = next(iter(value.values()))
+    if not isinstance(value, list) or any(not isinstance(row, dict) for row in value):
+        raise ValidationError('The JSON item collection must be an array of objects. Select its collection path.')
+    if len(value) > 1000:
+        raise ValidationError('A record exceeds 1,000 JSON line items.')
+    return value
+
+
 def grouped(mode, record, query, source_rows, line_keys):
     mappings = [item for item in query['mappings'] if item['include']]
-    has_lines = any(item['id'].startswith('line:') and item['method'] != 'empty' for item in mappings)
+    has_lines = any(item['id'].startswith('line:') and item['id'] != 'line:line_no' and item['method'] != 'empty' for item in mappings)
     result, issues, duplicate_count = OrderedDict(), [], 0
-    for raw in source_rows:
+    collection = query.get('lineItems') if has_lines else None
+    expanded = []
+    if collection:
+        seen = set()
+        for raw in source_rows:
+            used = {*query['keys'], collection['column'], *[mapping['column'] for mapping in mappings if mapping['id'].startswith('header:') and mapping['method'] in {'column', 'json'}]}
+            identity = json.dumps({ref: raw.get(ref) for ref in used}, cls=DjangoJSONEncoder, sort_keys=True)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            items = item_rows(raw.get(collection['column']), collection.get('path', ''))
+            for index, item in enumerate(items, 1):
+                expanded.append((raw, item, index))
+            if not items:
+                expanded.append((raw, None, 0))
+    else:
+        expanded = [(raw, None, index) for index, raw in enumerate(source_rows, 1)]
+    for raw, json_item, index in expanded:
         key = tuple(raw[ref] for ref in query['keys'])
         if any(value is None for value in key):
             issues.append('A result row has an empty identifier.')
-        mapped = {item['id']: raw.get(item['column']) if item['method'] == 'column' else item.get('value') if item['method'] == 'value' else None for item in mappings}
+        mapped = {mapping['id']: raw.get(mapping['column']) if mapping['method'] == 'column' else
+                  json_path(json_item if collection and mapping['id'].startswith('line:') else raw.get(mapping['column']), mapping.get('path', ''), optional=mapping['id'].startswith('line:')) if mapping['method'] == 'json' and (not collection or json_item is not None) else
+                  (index if collection else len(result.get(key, {}).get('lines', []))+1) if mapping['method'] == 'number' else mapping.get('value') if mapping['method'] == 'value' else None for mapping in mappings}
         for item in mappings:
             value = mapped[item['id']]
             if value is None:
                 continue
+            if isinstance(value, (dict, list)) and item.get('transform') in {'trim', 'uppercase'}:
+                raise ValidationError(item['id']+' contains structured JSON. Map a scalar field before applying text conversions.')
             if item.get('transform') == 'trim':
                 mapped[item['id']] = str(value).strip()
             elif item.get('transform') == 'uppercase':
@@ -242,18 +333,64 @@ def grouped(mode, record, query, source_rows, line_keys):
         else:
             if result[key]['header'] != header:
                 issues.append('One record identifier produces different header values. Refine its related-table matches.')
-            if not has_lines and (not query.get('distinct') or result[key]['header'] != header):
+            # Prepared rows may repeat a header after a merge/JSON expansion.
+            # The original source identity defines one accounting record even
+            # when the user deliberately supplies no optional item fields.
+            if not has_lines and not query.get('pipeline') and (not query.get('distinct') or result[key]['header'] != header):
                 duplicate_count += 1
-        if has_lines and line:
-            identity = tuple(raw.get(ref) for ref in line_keys) if line_keys else json.dumps(line, cls=DjangoJSONEncoder, sort_keys=True)
-            if line_keys and any(value is None for value in identity):
+        if has_lines and any(value not in (None, '') for name,value in line.items() if name != 'line:line_no') and (not collection or json_item is not None):
+            identity = (index, json.dumps(raw, cls=DjangoJSONEncoder, sort_keys=True)) if collection else tuple(raw.get(ref) for ref in line_keys) if line_keys else json.dumps(line, cls=DjangoJSONEncoder, sort_keys=True)
+            if line_keys and not query.get('pipeline') and any(value is None for value in identity):
                 issues.append('A line item has no matched source identifier.')
             if identity not in result[key]['line_keys']:
                 result[key]['line_keys'].add(identity)
-                result[key]['lines'].append(line)
+                if len(result[key]['lines']) >= 1000:
+                    issues.append('A record exceeds 1,000 line items. Refine its joins or item collection.')
+                else:
+                    result[key]['lines'].append(line)
     if duplicate_count:
         issues.append(f'{duplicate_count} extra row(s) share an identifier. Refine the matches or enable exact duplicate removal.')
     return list(result.values()), list(dict.fromkeys(issues)), duplicate_count
+
+
+def stream_records(mode, record, include_raw=False):
+    """Read every matching identity in one source snapshot, without a dataset cap."""
+    query = record.setup_data['database']
+    metadata = validate_query(mode, record, query, complete=True)
+    statement, params, line_keys = compile_query(query, metadata, bounded=False)
+    try:
+        with psycopg.connect(**connection_parameters(metadata['source']), row_factory=dict_row) as connection:
+            connection.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
+            with connection.cursor(name='bizmatic_migration_review') as cursor:
+                cursor.itersize = 250
+                cursor.execute(statement, params)
+                for key, source_group in groupby(cursor, key=lambda row: tuple(row[ref] for ref in metadata['keys'])):
+                    raw, size, oversized = [], 0, False
+                    for row in source_group:
+                        size += len(json.dumps(row, cls=DjangoJSONEncoder).encode())
+                        if len(raw) >= MAX_ROWS or size > 8*1024*1024:
+                            oversized = True
+                        elif not oversized:
+                            raw.append(row)
+                    identity = dict(zip(metadata.get('key_names', [ref.removeprefix('base.') for ref in metadata['keys']]), key))
+                    try:
+                        if oversized:
+                            raise ValidationError('This record exceeds 5,000 joined rows or 8 MiB. Refine its joins or selected fields.')
+                        rows, issues, _ = grouped(mode, record, query, raw, line_keys)
+                        row = rows[0]
+                        parsed = {'record': {name.split(':', 1)[1]: value for name, value in row['header'].items()},
+                                  'lines': [{name.split(':', 1)[1]: value for name, value in line.items()} for line in row['lines']], 'issues': issues}
+                        yield (identity, parsed, raw) if include_raw else (identity, parsed)
+                    except (ValidationError, ValueError, TypeError) as error:
+                        parsed = {'record': {}, 'lines': [], 'issues': error.messages if isinstance(error, ValidationError) else [str(error)]}
+                        yield (identity, parsed, raw) if include_raw else (identity, parsed)
+    except psycopg.Error as error:
+        if metadata.get('pipeline'):
+            from .pipeline import execution_error
+            raise ValidationError(execution_error(error)+' No accounting data has been saved.') from None
+        raise ValidationError('The read-only migration query failed or timed out. No accounting data has been saved. Review the connection and query, then retry.') from None
+    except ImproperlyConfigured:
+        raise ValidationError('The saved database credential key is unavailable. Restore it before reviewing or migrating records.') from None
 
 
 def read_rows(mode, record):
@@ -267,22 +404,39 @@ def read_rows(mode, record):
 def test(mode, record, limit):
     if type(limit) is not int or limit not in {5, 10, 25}:
         raise ValidationError('Preview 5, 10, or 25 records.')
-    query, metadata, records, issues, duplicates = read_rows(mode, record)
-    for item in records:
-        output = {'record': {key.split(':', 1)[1]: value for key, value in item['header'].items()}, 'lines': [{key.split(':', 1)[1]: value for key, value in line.items()} for line in item['lines']], 'issues': []}
-        issues.extend(clean_output(mode, record, output))
-    if not records:
-        issues.append('No matching records. Adjust the row conditions before submitting.')
-    shown = records[:limit]
-    return {'passed': not issues, 'issues': list(dict.fromkeys(issues)), 'count': len(records), 'duplicateCount': duplicates,
-            'rows': [{**item['header'], **(line or {})} for item in shown for line in (item['lines'] or [{}])][:100],
-            'rawRows': [item['raw'] for item in shown],
+    query = record.setup_data['database']
+    metadata = validate_query(mode, record, query, complete=True)
+    iterator = stream_records(mode, record, include_raw=True)
+    try:
+        preview = list(islice(iterator, limit+1))
+    finally:
+        iterator.close()
+    shown, issues = preview[:limit], []
+    for key, output, raw in shown:
+        issues.extend('Source '+json.dumps(key, cls=DjangoJSONEncoder)+': '+message for message in clean_output(mode, record, output))
+    if not shown:
+        issues.append('No matching records. Adjust the row conditions before migration.')
+    raw_columns = shown[0][2][0] if shown and shown[0][2] else {}
+    source_headers = ([column for column in metadata['output_columns'] if column['id'] in raw_columns]
+                      if metadata.get('pipeline') else
+                      [{'id': ref, 'label': str(metadata['tables'][ref.split('.', 1)[0]])+'.'+ref.split('.', 1)[1]} for ref in raw_columns])
+    return {'passed': not issues, 'issues': list(dict.fromkeys(issues)), 'count': len(shown), 'has_more': len(preview)>limit, 'duplicateCount': 0,
+            'rows': [{**{'header:'+key:value for key,value in output['record'].items()}, **{'line:'+key:value for key,value in line.items()}} for _, output, _ in shown for line in (output['lines'] or [{}])][:100],
+            'rawRows': [row for _, _, raw in shown for row in raw[:1]],
             'headers': [{'id': item['id'], 'label': next(field['label'] for field in field_catalog(mode, record.target_entity) if field['id'] == item['id'])} for item in query['mappings'] if item['include']],
-            'sourceHeaders': [{'id': ref, 'label': str(metadata['tables'][ref.split('.', 1)[0]])+'.'+ref.split('.', 1)[1]} for ref in (shown[0]['raw'] if shown else [])]}
+            'sourceHeaders': source_headers}
 
 
 def import_rows(mode, record, limit, offset):
-    query, _, rows, issues, _ = read_rows(mode, record)
+    # Legacy read-only sample tools still use this interface. Fetch only their
+    # requested window rather than materializing a whole dataset for one sample.
+    iterator = stream_records(mode, record)
+    try:
+        rows = list(islice(iterator, offset, offset+limit))
+    finally:
+        iterator.close()
+    issues = [issue for _, parsed in rows for issue in parsed['issues']]
     if issues:
         raise ValidationError(issues)
-    return [({**item['header'], **{key.removeprefix('base.'): item['raw'][key] for key in query['keys']}}, item['lines']) for item in rows[offset:offset+limit]]
+    return [({**{'header:'+name:value for name,value in parsed['record'].items()}, **key},
+             [{'line:'+name:value for name,value in line.items()} for line in parsed['lines']]) for key, parsed in rows]

@@ -1,154 +1,106 @@
 # Bizmatic
 
-A Django application for document and financial operations. Bizmatic supports
-document extraction and review, approved document routing, AP/AR records and
-reconciliation, PostgreSQL metadata exploration, and bounded accounting imports.
-The existing Django and Bootstrap workspaces use the approved Bizmatic identity.
+Bizmatic is a Django workspace for extracting business documents, preparing accounting data, and reconciling accounts payable and receivable. It brings document review, PostgreSQL source configuration, and accounting workflows into one application.
 
-## Current functionality
+> **Project status:** Bizmatic currently runs provider calls and database migrations within web requests. Its workspaces do not provide application-level authentication or organization isolation; restrict access at the hosting layer before making an instance available to others. No project-wide license has been selected. Bundled third-party assets retain their own license terms.
 
-- Database-backed document and batch pages with search, filters, and pagination.
-- Document details, text extraction results, and per-provider LLM attempt history.
-- Markdown result rendering with embedded HTML and remote images disabled.
-- Extraction services for text-based PDFs, DOCX, Excel, TXT, and CSV.
-- Image extraction adapters for Ollama, OpenAI, Anthropic, Google, Mistral,
-  Alibaba, and DeepSeek. Available capabilities depend on the configured model.
-- Document upload, extraction reruns, review and editing, and routing through
-  CSRF-protected Django actions.
-- Separate AP and AR workspaces for suppliers/customers, orders, delivery
-  receipts, invoices, payments, aging, reconciliation, and record-first setup.
-- Bounded PostgreSQL schema discovery and reviewed, idempotent AP/AR imports.
-- A responsive shared application shell with light and dark themes.
+## Features
 
-Provider calls and imports run during HTTP requests. The application does not
-include a background queue, application-level login, or organization/user
-management. See the module guides for workflow limits and operating requirements.
+- **Document operations:** upload and organize documents and batches; extract text from supported files; review, edit, and route extracted results. Image and LLM extraction depend on the configured provider and model.
+- **Accounts payable and receivable:** manage suppliers or customers, orders, delivery receipts, invoices, payments, aging, and reconciliation.
+- **Database extraction:** connect to PostgreSQL, inspect versioned schema snapshots, and build accounting datasets using a table preview, joins, JSON expansion, type conversions, filters, and sorting.
+- **Reviewed updates:** match prepared columns to accounting fields, validate a sample, review all matching source records, and explicitly confirm the migration or subsequent data update. Errors prevent the accounting update.
+- **Audit context:** retain extraction attempts, configuration revisions, and source identifiers alongside accounting records.
 
-## Local setup
+See the [query builder guide](bizmatic_django/accounts_receivable/QUERY_BUILDER.md) for supported transformations and the [migration guide](bizmatic_django/accounts_receivable/DATABASE_MIGRATION.md) for review and update behavior.
 
-Use Python 3.14 and the pinned packages in `requirements.txt`. Commands below run
-from the repository root in Bash or Zsh on macOS/Linux.
+## Requirements
+
+- Python 3.14 and the dependencies pinned in the root [`requirements.txt`](requirements.txt).
+- SQLite for a local application database, or a provisioned PostgreSQL application database.
+- PostgreSQL 14 or newer for external database extraction. Source connection profiles are configured in the application.
+- An optional LLM provider and suitable model for provider-dependent extraction, routing, or setup assistance. Local browsing and database query preparation do not require an LLM.
+
+## Getting started
+
+Run these commands from the repository root on macOS or Linux:
 
 ```sh
 python3.14 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-```
-
-For a new checkout, copy the example configuration (keep any existing `.env`):
-
-```sh
 cp bizmatic_django/.env.example bizmatic_django/.env
 ```
 
-Edit `bizmatic_django/.env` and replace `DJANGO_SECRET_KEY`. Generate a value with:
+The copy command is for a new checkout. If `bizmatic_django/.env` already exists, keep it and compare its settings with the example instead of overwriting it.
+
+Edit `bizmatic_django/.env` and set a unique `DJANGO_SECRET_KEY`. For example, generate a key with:
 
 ```sh
 python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'
 ```
 
-Quote the generated value in `.env`, for example `DJANGO_SECRET_KEY='your-value'`.
-The example uses SQLite, enables local debug mode, and puts service uploads in
-`./storage_file` relative to the working directory. Choose an absolute storage
-path if the app will be started from different directories.
+Quote the value in `.env`. The example uses SQLite, enables debug mode for local development, and stores uploads in `./storage_file` relative to the process working directory. Use an absolute `LOCAL_FILE_STORAGE_PATH` if you start the application from different directories.
 
-The project loads `bizmatic_django/.env` automatically. Start Django with:
+If you plan to save external database connections, provision the credential encryption key before creating connection profiles. The command preserves an existing key:
+
+```sh
+python bizmatic_django/manage.py init_db_credential_key
+```
+
+Apply the application migrations and start the development server:
 
 ```sh
 python bizmatic_django/manage.py migrate
 python bizmatic_django/manage.py runserver
 ```
 
-Open [Documents](http://127.0.0.1:8000/documents/),
-[Accounts payable](http://127.0.0.1:8000/accounts-payable/),
-[Accounts receivable](http://127.0.0.1:8000/accounts-receivable/), or
-[Database connections](http://127.0.0.1:8000/databases/). A fresh database shows
-empty states; setup does not seed application records. Restart the server after
-configuration changes. `migrate` creates or updates tables in the configured
-database; it does not create the PostgreSQL database itself or copy records from
-an old database.
+Open [Documents](http://127.0.0.1:8000/documents/), [Accounts payable](http://127.0.0.1:8000/accounts-payable/), [Accounts receivable](http://127.0.0.1:8000/accounts-receivable/), or [Database connections](http://127.0.0.1:8000/databases/). A fresh installation starts without seeded business records. `migrate` updates tables in the configured application database; it does not create a PostgreSQL database or transfer existing records.
 
-## Configuration
+## Environment configuration
 
-The complete variable list is in [`.env.example`](bizmatic_django/.env.example).
+The application loads **`bizmatic_django/.env`** automatically, regardless of the working directory. Process environment variables take precedence. Restart the process after editing the file.
 
-| Variables | Purpose |
+| File or setting | Purpose |
 | --- | --- |
-| `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_TIME_ZONE` | Django runtime settings |
-| `DB_ENGINE`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | Database connection; SQLite is the default |
-| `LOCAL_FILE_STORAGE_PATH` | Directory used by the upload storage service |
-| `DOC_EXTRACTION_LLM_PROVIDER` | One provider or a comma-separated provider list |
-| `DOC_EXTRACTION_MAX_CONCURRENCY` | Positive concurrency limit, default `5` |
-| `DOC_EXTRACTION_LLM_TIMEOUT_SECONDS` | Positive HTTP timeout in seconds, default `120` |
-| `DOC_EXTRACTION_<PROVIDER>_*` | Model, API key, and optional endpoint settings |
-| `RECONCILIATION_PRICE_TOLERANCE` | Allowed monetary rounding difference per matched line, default `0.01` |
+| [`bizmatic_django/.env.example`](bizmatic_django/.env.example) | Tracked template with placeholders, defaults, and optional provider settings. It is safe to share. |
+| `bizmatic_django/.env` | Your local runtime configuration and secrets. It is ignored by Git and must not be committed. |
+| `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_TIME_ZONE` | Django runtime settings. Use a unique secret and disable debug mode outside local development. |
+| `DB_ENGINE`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | The **application** database. The example defaults to SQLite; PostgreSQL values are documented in the template. |
+| `LOCAL_FILE_STORAGE_PATH` | Directory for uploaded files. Store it outside the repository or ensure it is ignored. |
+| `DOC_EXTRACTION_*`, `ROUTER_*`, `ACCOUNTS_PAYABLE_*`, `ACCOUNTS_RECEIVABLE_*`, `CONFIG_ASSISTANT_*` | Provider, model, endpoint, timeout, and request limits for each workflow. Blank module-specific keys and endpoints can fall back to document-extraction settings. |
+| `RECONCILIATION_PRICE_TOLERANCE` | Allowed monetary difference per matched line; defaults to `0.01`. |
 
-Django commands, ASGI/WSGI startup, and extraction services share the same
-`python-dotenv` loader. Its file path is resolved from the project location,
-independent of the working directory. Existing process variables take precedence
-over `.env`; this includes exports in a terminal and PyCharm run configuration
-variables. If an old database setting is exported, unset it or update it before
-running a command. Changes to `.env` apply to new processes; restart the server.
+Source PostgreSQL credentials are entered in **Database connections**, separately from the application database settings. Saved passwords are encrypted with a key stored by default at `~/.config/bizmatic/db-extraction.key`. Keep that key outside Git, make it available to all application workers, and back it up separately from the application database. See the [database extraction guide](bizmatic_django/db_extraction/README.md) for permissions, encryption, and schema discovery.
 
-No provider credentials are needed to browse the pages or run the existing
-tests. To invoke image extraction, select a provider, configure its credentials
-where required, and choose a model that supports the input. The example selects
-Ollama; start its server and install the configured model before invoking it.
-Provider failures propagate to the caller.
+## Database extraction workflow
 
-PostgreSQL configuration is included as a commented alternative in the example.
-To use it, provision a database and set the `DB_*` variables in `.env` before
-migrating. `psycopg[binary]` is included in `requirements.txt`. CI uses SQLite.
-From the directory containing `manage.py`, inspect the selected target without
-printing its user or password:
+1. Add and test a PostgreSQL connection, then refresh its schema.
+2. In AP or AR extraction setup, choose a source table and prepare the data with ordered transformation steps.
+3. Match the final columns to the destination accounting fields. Line-item fields are optional; missing line numbers can be generated.
+4. Validate a sample and review the full migration. Confirm only after the review reports no errors.
+5. For a saved setup, use **Update data** to review and apply later source changes.
 
-```sh
-python manage.py shell -c 'from django.conf import settings; db = settings.DATABASES["default"]; print({key: db.get(key) for key in ("ENGINE", "NAME", "HOST", "PORT")})'
-python manage.py migrate --plan
-python manage.py migrate
-```
+Source previews use read-only transactions. The source database needs the appropriate read privileges; the application database stores the accounting records after confirmation. Full reviews and updates run synchronously, so large datasets may require suitable application and proxy timeouts.
 
 ## Project layout
 
 ```text
-requirements.txt                 Pinned Python dependencies
 bizmatic_django/
-  manage.py                      Django management entry point
-  .env.example                   Shareable configuration template
-  bizmatic_django/                Settings and ASGI/WSGI entry points
-  accounts_payable/              AP records, services, templates and tests
-  accounts_receivable/           AR records, shared AP/AR workspace and APIs
-  db_extraction/                 PostgreSQL metadata and accounting imports
-  router/                        Document routing, review and handoff
-  document_extraction/
-    models.py                    Database models
-    migrations/                  Versioned schema changes
-    views.py, urls.py            HTTP pages and POST action routes
-    schemas/                     Pydantic file metadata and type definitions
-    services/                    Storage, document extraction, images, and LLMs
-    utils/                       File classification, concurrency, and Markdown
-    templates/, static/          Django templates and bundled UI assets
-    templatetags/                Safe Markdown presentation
-    tests.py, test_environment.py Django view and configuration tests
-    util.py                      Compatibility exports
+  manage.py                    Django management entry point
+  .env.example                 Shareable environment template
+  bizmatic_django/             Settings, environment loader, ASGI and WSGI
+  document_extraction/         Documents, storage, extraction, and review
+  db_extraction/               PostgreSQL connections and schema snapshots
+  router/                      Document routing and handoff
+  accounts_payable/            Accounts payable models and workflows
+  accounts_receivable/         Accounts receivable and shared AP/AR services and UI
+requirements.txt               Pinned root dependencies
+CONTRIBUTING.md                Development and contribution guidance
 ```
 
-## Brand assets
-
-The application shell uses the approved Bizmatic symbol from
-[`approved-canva-symbol.png`](bizmatic_django/document_extraction/static/document_extraction/brand/approved-canva-symbol.png)
-and the bundled Inter variable font. The font's SIL Open Font License is in the
-same directory. Approved colors, semantic tokens, theme behavior, and the Django
-workspace adapter live there as well. The supplied logo is a raster PNG; this
-repository does not claim to contain a separate vector logo master.
-
-The application does not seed demo records. Fresh workspaces show empty states
-until records are uploaded or created through the supported workflows.
-
-## Checks
-
-From an activated environment at the repository root:
+## Development and documentation
 
 ```sh
 python bizmatic_django/manage.py check
@@ -156,65 +108,6 @@ python bizmatic_django/manage.py makemigrations --check --dry-run
 python bizmatic_django/manage.py test document_extraction
 ```
 
-Tests use Django's separate test database. GitHub Actions runs these checks on
-Python 3.14 with SQLite. See [CONTRIBUTING.md](CONTRIBUTING.md) for change guidance.
+Tests use a separate Django test database. Consult [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes. More detail is available in the [document workspace guide](bizmatic_django/document_extraction/FRONTEND.md), [database extraction guide](bizmatic_django/db_extraction/README.md), [AP/AR guide](bizmatic_django/accounts_receivable/README.md), [query builder guide](bizmatic_django/accounts_receivable/QUERY_BUILDER.md), and [migration guide](bizmatic_django/accounts_receivable/DATABASE_MIGRATION.md).
 
-## Operational notes
-
-- Legacy `.doc` files must be converted to `.docx`. Scanned PDFs need an OCR
-  workflow; the PDF text extractor does not perform OCR.
-- CSV/Excel Markdown rendering needs `tabulate`; Excel readers also use
-  `openpyxl` and `xlrd`. All three are included in `requirements.txt`.
-- `.env`, virtual environments, local SQLite files, uploads, caches, IDE
-  settings, and collected static files are ignored. Custom storage directories
-  inside the checkout must also be ignored before adding files to Git.
-- These pages currently have no application-level login requirement. Hosting
-  publicly requires access control and deployment configuration. Set a unique
-  secret, disable debug mode, and configure static-file serving for deployment.
-- No project license has been selected. Bundled Falcon and vendor assets have
-  their own licensing terms; preserve their existing notices.
-
-## Database extraction
-
-The PostgreSQL metadata workspace opens directly at `/databases/` without a
-login or admin account. It supports connection verification, encrypted credentials, schema
-snapshots, metadata browsing, and local connection/history deletion. See the
-[database module setup and workflow](bizmatic_django/db_extraction/README.md)
-for key provisioning, permissions, dependencies, and deployment instructions.
-
-## Accounting reconciliation MVP
-
-The accounting workspaces at `/accounts-receivable/` and `/accounts-payable/`
-use saved records for accounts, orders, deliveries, invoices, payments,
-reconciliation and aging. Submitted configurations control document extraction
-and bounded PostgreSQL imports. Approving a router destination starts accounting
-extraction. See the [AP/AR backend guide](bizmatic_django/accounts_receivable/README.md)
-for setup, file organization, and MVP limits.
-
-Every AP and AR model inherits directly from Django's `models.Model`, with its
-fields declared in the app's `models.py`. Model comments explain each record's
-purpose. Each app's `services/reconciliation.py` contains plain functions for validation,
-matching, and settlement; `signals.py` refreshes cases when document membership
-changes. Standard `clean()`, `save()`, and `delete()` hooks call these functions.
-
-The AP and AR models provide a reconciliation backend. Create purchase orders,
-delivery receipts, and invoices with their line items. Add the documents to a
-`Transaction`, then link the lines through `DocumentMatch`. Matching checks party,
-currency, quantities, price, tax, and discounts. Receipt lines record actual
-received and accepted quantities. The same quantity cannot be matched twice.
-Cases automatically track pending, partial, matched, or exception status and
-their discrepancy amount when documents or matches change.
-
-Record payments and allocate cash, withholding tax, and discounts to invoices
-through `PaymentAllocation`. Cleared payments reduce the outstanding invoice
-balance; reversing a payment removes it from settlement. Payments can be
-recorded and cleared independently of matching. Allocations cannot exceed the
-payment's available amounts or the invoice total.
-
-`source_document` links to the uploaded file, and the selected extraction log
-identifies the text used to populate a record. Database provenance uses
-`source_database`, `source_table`, and `source_record_key`; these identify the
-external record and prevent duplicate imports. Database Extraction stores schema metadata; accounting import services read the
-selected business rows using submitted mappings.
-`RECONCILIATION_PRICE_TOLERANCE` defaults to `0.01` in the transaction currency.
-Quantity differences prevent a complete match.
+Text extraction supports text-based PDFs, DOCX, Excel, TXT, and CSV. Scanned PDFs require an OCR workflow; legacy `.doc` files must be converted to `.docx`. Provider and model capabilities vary, and provider calls may incur charges. Static vendor assets and fonts include their own notices in the repository.

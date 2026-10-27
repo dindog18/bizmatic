@@ -4,7 +4,7 @@
 {% block extra_styles %}
 <link rel="stylesheet" href="{% static 'accounting/workspace.css' %}?v=concept-c-1">
 <link rel="stylesheet" href="{% static 'accounting/setup/layout.css' %}?v=concept-c-1">
-<link rel="stylesheet" href="{% static 'accounting/setup/database.css' %}?v=concept-c-1">
+<link rel="stylesheet" href="{% static 'accounting/setup/database.css' %}?v=review-spacing-1">
 <link rel="stylesheet" href="{% static 'accounting/setup/documents.css' %}?v=concept-c-1">
 
 {% endblock %}
@@ -19,10 +19,10 @@
 {% endblock %}
 {% block workspace_footer %}<span>Bizmatic · {{ workspace_name }}</span><span>Record first · Review before saving</span>{% endblock %}
 {% block scripts %}
-<script src="{% static 'accounting/api.js' %}?v=backend-1" defer></script>
+<script src="{% static 'accounting/api.js' %}?v=backend-1" defer></script><script src="{% static 'accounting/configuration-delete.js' %}?v=delete-2" defer></script>
 <script src="{% static 'accounting/setup/annotations.js' %}?v=record-first-2" defer></script>
-<script src="{% static 'accounting/setup/query-state.js' %}?v=record-first-2" defer></script>
-<script src="{% static 'accounting/setup/documents.js' %}?v=record-first-2" defer></script>
-<script src="{% static 'accounting/setup/database.js' %}?v=workspace-spacing-1" defer></script>
-<script src="{% static 'accounting/setup/workspace.js' %}?v=record-first-2" defer></script>
+<script src="{% static 'accounting/setup/query-state.js' %}?v=full-migration-1" defer></script>
+<script src="{% static 'accounting/setup/documents.js' %}?v=optional-lines-1" defer></script>
+<script src="{% static 'accounting/setup/power-query.js' %}?v=power-query-2" defer></script>
+<script src="{% static 'accounting/setup/workspace.js' %}?v=power-query-2" defer></script>
 {% endblock %}
