@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST, require_safe
 from pydantic import ValidationError as SchemaError
 
-from .models import RoutingDestination, RoutingRule
+from .models import DocumentRoute, RoutingDestination, RoutingRule
 from .schemas.routing import ExecutionRequest
 from .services import configuration, execution, pages, records, handoff
 from .services.catalog import destination_catalog
@@ -49,7 +49,8 @@ def workspace(request, screen="queue", record_id=None):
         name: reverse(f"ROUTER:{name}", args=[0] if name in {"document", "destination_edit", "rule_edit", "log"} else [])
         for name in titles
     }
-    api = {"configuration": reverse("ROUTER:configuration_save", args=["destinations"]),
+    api = {"execute": reverse("ROUTER:execute"),
+           "configuration": reverse("ROUTER:configuration_save", args=["destinations"]),
            "configurationEdit": reverse("ROUTER:configuration_edit", args=["destinations", 0]),
            "toggle": reverse("ROUTER:configuration_toggle", args=["destinations", 0]),
            "review": reverse("ROUTER:route_review", args=[0]),
@@ -72,8 +73,13 @@ def execute(request):
         completed = sum(log.status == "completed" for log in logs)
         failed = sum(log.status == "failed" for log in logs)
         message = f"Routing finished: {completed} completed, {failed} failed, {len(logs) - completed - failed} still running."
-        messages.info(request, message)
+        statuses = list(DocumentRoute.objects.filter(routing_log__in=logs).values_list("processing_status", flat=True))
+        accounting = {status: statuses.count(status) for status in ("completed", "failed", "pending", "processing")}
+        if statuses:
+            message += f" Accounting extraction: {accounting['completed']} completed, {accounting['failed']} failed, {accounting['pending'] + accounting['processing']} waiting."
+        (messages.warning if accounting["failed"] else messages.info)(request, message)
         return {"message": message, "logs": [{"id": row.pk, "status": row.status} for row in logs],
+                "accounting": accounting,
                 "redirect": reverse("ROUTER:document", args=[logs[0].source_document_id]) if len(logs) == 1 else reverse("ROUTER:queue")}
     return _perform(request, run)
 
@@ -110,8 +116,14 @@ def route_review(request, route_id):
 
 @require_POST
 def route_process(request, route_id):
-    return _perform(request, lambda data: {"record": pages.route(handoff.process(
-        route_id, configuration_id=data.get("configuration_id"), revision=data.get("revision")))})
+    def process(data):
+        if not isinstance(data.get("revision"), str) or not data["revision"]:
+            raise ValidationError("Reload the route before retrying extraction.")
+        # An explicit retry may resume an automatic handoff without recording a
+        # human approval. Rejected, stale, and superseded routes remain blocked.
+        return {"record": pages.route(handoff.process(route_id,
+            configuration_id=data.get("configuration_id"), revision=data["revision"], automatic=True))}
+    return _perform(request, process)
 
 
 @require_POST

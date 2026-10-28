@@ -2,7 +2,7 @@
 
 Like document extraction, a request waits for a bounded group of async provider
 calls. Every document gets its own durable attempt; one failure does not erase
-successful siblings. Destination-module extraction is a separate future step.
+successful siblings. Valid matches then start destination-module extraction.
 """
 
 import logging
@@ -17,7 +17,7 @@ from document_extraction.models import Batch, Document, LLMExtractionLog
 from document_extraction.utils.concurrency import concurrent_map
 from ..models import DocumentRoute, LLMRoutingLog, RoutingRule
 from ..schemas.routing import ExecutionRequest
-from . import llm
+from . import handoff, llm
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,8 @@ def _register(request: ExecutionRequest, config):
             raise ValidationError("Wait for document extraction to finish before routing.")
         if LLMRoutingLog.objects.filter(source_document_id__in=ids, status__in=["queued", "processing"]).exists():
             raise ValidationError("A selected document is already being routed. Wait for that attempt to finish.")
+        if DocumentRoute.objects.filter(routing_log__source_document_id__in=ids, processing_status="processing").exists():
+            raise ValidationError("Wait for AP/AR extraction to finish before rerunning routing.")
         rules = rule_snapshot()
         if not rules:
             raise ValidationError("Add an active routing destination and an active routing rule before running documents.")
@@ -143,6 +145,10 @@ async def _run(logs, config):
             error = f"Routing failed: {type(exc).__name__}: {str(exc)}"
             logger.warning("document=%s routing_log=%s failed type=%s", log.source_document_id, log.pk, type(exc).__name__)
         await sync_to_async(_save_result)(log, result, parsed, error, round((perf_counter() - started) * 1000))
+        if parsed is not None and not error:
+            # Commit the routing snapshot before accounting reads it. Each route
+            # keeps its own extraction outcome; a failure must not lose siblings.
+            await sync_to_async(handoff.process_matches)(log.pk)
     await concurrent_map(run_one, logs, config.concurrency)
 
 

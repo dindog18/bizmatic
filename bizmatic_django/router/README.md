@@ -2,8 +2,10 @@
 
 Routing reads saved extraction text, evaluates active human-configured rules with
 one LLM, and saves zero, one, or multiple `DocumentRoute` decisions per attempt.
-Approving an AP/AR destination invokes its accounting extraction using a submitted
-configuration. The exact source is retained in `route.routing_log.input_text`.
+Each successful LLM match automatically invokes AP/AR accounting extraction using
+the one submitted module-wide document configuration for its target. Human review
+remains pending; extraction does not record a human approval. The exact source is
+retained in `route.routing_log.input_text`.
 `services/handoff.py` saves per-route processing status, errors, and completion;
 completed routes are not processed twice. See the [accounting guide](../accounts_receivable/README.md).
 
@@ -36,7 +38,7 @@ starting any calls. Routing does not change the source review or processing stat
 - `services/llm.py`: router settings, prompt, native provider payloads, and response parsing.
 - `services/configuration.py`: configuration writes and revision checks.
 - `services/records.py`: route review, manual destinations, and accuracy feedback.
-- `services/handoff.py`: approval-to-accounting execution and explicit failed retries.
+- `services/handoff.py`: automatic accounting execution, approval, and explicit failed retries.
 - `services/pages.py`: database reads and the JSON used by the existing screens.
 - `views.py`, `urls.py`: GET screens and CSRF-protected POST handlers.
 - `static/router/`: configuration, review, and history interactions; no browser fixtures.
@@ -65,7 +67,20 @@ in the rule snapshot, and IDs are unique. No match is a completed attempt with n
 routes. Malformed output, truncation, and provider failures are saved as failed
 attempts with no partial route assignments.
 
-Destination reviews start pending. Stale source documents and superseded attempts
+Destination reviews start pending while accounting extraction runs automatically.
+Missing or ambiguous configurations and extraction failures are saved on the route;
+approve the route, select a submitted configuration if necessary, and use Process
+record to retry. A request replay does not restart extraction or failed routes.
+Document review and attempt log pages also offer Retry extraction for pending or
+failed routes, with an optional submitted configuration selection. This explicit
+retry preserves human review status and skips completed routes. Rejected, stale,
+or superseded routes cannot be retried.
+Use Rerun routing on either page to classify the latest saved text again using
+current rules, retaining the previous attempt. Unapproved source documents need
+explicit confirmation. Routing cannot restart while AP/AR extraction is running.
+An interrupted rerun dialog reuses its request ID when retried.
+Manually added destinations still start extraction when approved.
+Stale source documents and superseded attempts
 cannot receive new review decisions or manual destinations. Module/model identities
 with routing history cannot be retargeted; create another destination instead.
 

@@ -19,11 +19,13 @@
 .finance-workspace .btn, .finance-workspace .form-control, .finance-workspace .form-select { font-size:.8125rem; min-height:40px; }
 .finance-workspace .btn { display:inline-flex; align-items:center; justify-content:center; gap:.45rem; }
 .finance-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem; margin-bottom:1.5rem; }
+.finance-workspace .finance-kpis.finance-order-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
 .finance-kpi { padding:1.2rem; border-top:3px solid transparent; }
 .finance-kpi:first-child { border-top-color:var(--finance-accent); }
 .finance-kpi .kpi-label { color:var(--biz-color-text-secondary); font-size:.8125rem; display:flex; justify-content:space-between; align-items:center; }
 .finance-kpi .kpi-value { color:var(--biz-color-text-primary); font-family:var(--biz-font-family); font-weight:600; font-size:1.6rem; letter-spacing:-.04em; margin:.6rem 0 .3rem; overflow-wrap:anywhere; }
 .finance-kpi .kpi-note { color:var(--biz-color-text-secondary); font-size:.8125rem; }
+.finance-kpi .kpi-link { display:inline-flex; align-items:center; gap:.4rem; margin-top:.75rem; font-size:.8125rem; }
 .finance-kpi .kpi-value small { font-family:var(--biz-font-family); font-size:.8125rem; letter-spacing:0; margin-right:.3rem; color:var(--biz-color-text-secondary); }
 .finance-grid { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(0,1fr); gap:var(--app-layout-gap); margin-bottom:1.5rem; align-items:start; }
 .finance-grid.equal { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -109,6 +111,7 @@
 @media(max-width:1199px) { .finance-nav a { padding:.75rem .9rem; } }
 @media(max-width:991px) { .finance-grid,.finance-grid.equal { grid-template-columns:1fr; } .finance-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .finance-process { grid-template-columns:repeat(2,minmax(0,1fr)); } .finance-sticky { position:static; } }
 @media(max-width:575px) {
+  .finance-workspace .finance-kpis.finance-order-kpis { grid-template-columns:1fr; }
   .finance-workspace-top { gap:.5rem; flex-wrap:wrap; }
   .finance-heading { flex-direction:column; }
   .finance-heading h1 { font-size:1.3rem; }

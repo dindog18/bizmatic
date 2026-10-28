@@ -40,16 +40,63 @@ async def document_file_text_extraction(stored_file: StoredFileMetadata) -> str:
 
 
 def extract_pdf_to_markdown(file_path: Path) -> str:
-    """Extract text from a text-based PDF and label each page in Markdown.
-
-    Scanned or image-only PDFs may contain little or no extractable text and
-    should be routed through OCR when that workflow is added.
-    """
+    """Preserve PDF tables and reading order instead of flattening every cell."""
     parts = []
     with pymupdf.open(file_path) as pdf:
         for page_number, page in enumerate(pdf, start=1):
-            parts.append(f"## Page {page_number}\n\n{page.get_text('text').strip()}")
-    return "\n\n".join(parts).strip()
+            tables = page.find_tables().tables
+            regions = []
+            elements = []
+            for table in tables:
+                # Merged cells can cause unrelated sections to be detected as
+                # one table. Split where the actual column layout changes.
+                group, group_cells, previous_columns, top = [], [], None, table.bbox[1]
+                def emit_group():
+                    # Short metadata/merged-label sections read better as
+                    # positioned text; reserve tables for actual row grids.
+                    if len(group) >= 2 and len(group[0]) >= 3 and any(any(cell for cell in row) for row in group):
+                        elements.append((top, table.bbox[0], _pdf_table(group)))
+                        regions.extend(group_cells)
+                for row, geometry in zip(table.extract(), table.rows):
+                    columns = tuple(i for i, cell in enumerate(row) if cell is not None)
+                    if not columns:
+                        continue
+                    if group and columns != previous_columns:
+                        emit_group()
+                        group, group_cells = [], []
+                    if not group:
+                        top = geometry.bbox[1]
+                    group.append([str(row[i] or '').strip() for i in columns])
+                    group_cells.extend(pymupdf.Rect(geometry.cells[i]) for i in columns if geometry.cells[i] is not None)
+                    previous_columns = columns
+                if group:
+                    emit_group()
+            # Keep all text outside tables, including titles and footnotes.
+            # Group words by their visual baseline to retain label/value order.
+            lines = []
+            for word in sorted(page.get_text('words'), key=lambda w: (w[1], w[0])):
+                center = pymupdf.Point((word[0]+word[2])/2, (word[1]+word[3])/2)
+                if any(center in region for region in regions):
+                    continue
+                if not lines or abs(word[1]-lines[-1][0]) > 3:
+                    lines.append((word[1], []))
+                lines[-1][1].append(word)
+            for y, words in lines:
+                words.sort(key=lambda w: w[0])
+                elements.append((y, words[0][0], ' '.join(w[4] for w in words)))
+            content = '\n\n'.join(value for _, _, value in sorted(elements) if value.strip())
+            if not content.strip():
+                raise ValueError(f'Page {page_number} has no extractable text. Use OCR for scanned PDFs.')
+            parts.append(f'## Page {page_number}\n\n{content}')
+    return '\n\n'.join(parts).strip()
+
+
+def _pdf_table(rows):
+    # Keep one-row metadata sections as data rather than column headings.
+    # Multi-row grids retain their first row as the document's table header.
+    if len(rows) == 1:
+        rows = [[''] * len(rows[0]), *rows]
+    return markdown_table(rows)
 
 
 def extract_word_to_markdown(file_path: Path) -> str:

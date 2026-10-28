@@ -152,7 +152,8 @@ class DocumentRoute(models.Model):
     """One proposed destination for one routing attempt, reviewed independently.
 
     The source document is available through routing_log.source_document.
-    Approval records a routing decision; it does not create an accounting record.
+    LLM matches start accounting extraction while human review stays pending.
+    Approval of a pending or failed route also starts its accounting extraction.
     """
 
     route_no = models.AutoField(primary_key=True)

@@ -88,3 +88,12 @@
   .da-field {min-height:64px;}
   .da-color-key {min-height:44px;}
 }
+
+/* Keep the repair action beside the diagnostic summary, with space on small screens. */
+.da-feedback-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;}
+.da-feedback-heading .btn{flex-shrink:0;min-height:2.5rem;}
+@media(max-width:575px){.da-feedback-heading .btn{width:100%;}}
+
+.da-exception-toggle{display:flex;align-items:flex-start;gap:.65rem;min-width:12rem;padding:.5rem 0;cursor:pointer;}
+.da-exception-toggle input{width:1.1rem;height:1.1rem;flex-shrink:0;margin-top:.15rem;accent-color:var(--bs-primary,#3152de);}
+.da-exception-toggle small{display:block;margin-top:.35rem;font-weight:normal;}

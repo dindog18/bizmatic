@@ -152,7 +152,7 @@ def validate_totals(target, record, lines, *, header_values=None, line_values=No
 
 
 @transaction.atomic
-def save_result(mode, config, parsed, log=None, route=None, database_source=None, source_table=None, source_key=None):
+def save_result(mode, config, parsed, log=None, route=None, database_source=None, source_table=None, source_key=None, *, automatic=False):
     if set(parsed) - {"record", "lines", "issues"} or not isinstance(parsed.get("issues", []), list):
         raise ValidationError("Expected record, lines, and issues in the extraction output.")
     if parsed.get("issues"):
@@ -175,7 +175,8 @@ def save_result(mode, config, parsed, log=None, route=None, database_source=None
         current_route = DocumentRoute.objects.select_for_update().get(pk=route.pk)
         route.routing_log.source_document = source
         _current_attempt(route.routing_log)
-        if current_route.review_status != "approved" or current_route.processing_status != "processing":
+        allowed_reviews = {"pending", "approved"} if automatic else {"approved"}
+        if current_route.review_status not in allowed_reviews or current_route.processing_status != "processing":
             raise ValidationError("The route is no longer approved for processing.")
         # A new routing attempt must not silently encode the same source again.
         if model(mode, "LLMExtractionLog").objects.filter(fk_document_no=source, target_entity=target, status="completed", purpose="extraction").exclude(pk=log.pk).exists():
@@ -207,7 +208,7 @@ def save_result(mode, config, parsed, log=None, route=None, database_source=None
     return record
 
 
-def execute_route(mode, route, configuration_id=None):
+def execute_route(mode, route, configuration_id=None, *, automatic=False):
     profiles = model(mode, "ExtractionConfiguration").objects.filter(status="submitted", source_type="document")
     target = next((key for key in TARGETS[mode] if model(mode, key).__name__ == route.destination.target_model), None)
     if not target:
@@ -230,7 +231,7 @@ def execute_route(mode, route, configuration_id=None):
     log.status = "processing"
     log.save(update_fields=["status", "updated_at"])
     try:
-        record = save_result(mode, config, parsed, log, route)
+        record = save_result(mode, config, parsed, log, route, automatic=automatic)
     except Exception as error:
         log.status = "failed"
         log.error_message = error_text(error) if isinstance(error, (ValidationError, ValueError)) else "Accounting records could not be saved. Check the extracted values and retry."

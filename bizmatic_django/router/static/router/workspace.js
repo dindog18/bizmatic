@@ -79,10 +79,17 @@
       case "process": {
         const route=ui.state.routes.find(row=>row.id===id);
         const value=document.getElementById(`route-profile-${id}`).value;
-        const saved=await ui.post(ui.apiURL("process",id), {revision:route.revision, configuration_id:value?Number(value):null});
-        Object.assign(route,saved);ui.render();ui.notice(`Accounting processing: ${route.processing_status}`,route.processing_status==='failed');
+        button.disabled = true;
+        button.textContent = "Extracting…";
+        ui.notice("Processing the AP/AR extraction… Please wait for the saved result.");
+        try {
+          const saved=await ui.post(ui.apiURL("process",id), {revision:route.revision, configuration_id:value?Number(value):null});
+          Object.assign(route,saved);
+          ui.notice(`Accounting processing: ${route.processing_status}${route.processing_error ? '. ' + route.processing_error : ''}`,route.processing_status==='failed');
+        } finally { ui.render(); }
         break;
       }
+      case "rerun": ui.showRerun(id); break;
       case "add-route": ui.showAddRoute(Number(button.dataset.logId)); break;
       case "close-dialog": document.getElementById("router-dialog").close(); break;
       case "accuracy": {
@@ -108,6 +115,7 @@
   ui.app.addEventListener("submit", async event => {
     event.preventDefault();
     const form = event.target;
+    if (form.id === "router-rerun-form") { await ui.submitRerun(form); return; }
     if (form.id === "router-config-form") ui.submitConfiguration(form);
     try {
       if (form.matches("[data-review-form]")) {

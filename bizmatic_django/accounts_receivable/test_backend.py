@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError
 from django.test import Client, TestCase
 
 from document_extraction.models import Document, DocExtractionLog
-from router.models import RoutingDestination, LLMRoutingLog, DocumentRoute
+from router.models import RoutingDestination, RoutingRule, LLMRoutingLog, DocumentRoute
 from router.services.handoff import process
 from accounts_receivable.services import configuration, pages, records, imports
 from accounts_receivable.services.catalog import model, party_key, revision
@@ -290,7 +290,7 @@ class BackendTests(TestCase):
         self.assertEqual(process(route.pk).processing_status,'failed')
         self.provider.side_effect=None
         self.respond(self.output());self.provider.return_value['done_reason']='length'
-        self.assertIn('truncated',process(route.pk).processing_error)
+        self.assertIn('output limit',process(route.pk).processing_error)
         self.assertEqual(model('ar','sales_invoice').objects.count(),0)
 
     def test_database_import_is_bounded_mapped_and_idempotent(self):
@@ -341,6 +341,168 @@ class BackendTests(TestCase):
         self.assertEqual(result['processing_status'],'completed')
         self.assertEqual(result['record_url'],'/accounts-receivable/invoices/1/')
         self.assertIn('/llm-logs/',result['history_url'])
+
+    def route_request(self, modes=("ap", "ar")):
+        document = Document.objects.create(file_name="Routed.txt", storage_path="/tmp/routed.txt",
+                                          document_type="text", review_status="approved", processing_status="completed")
+        DocExtractionLog.objects.create(fk_document_no=document, markdown_text="Invoice INV-1 for C1, total PHP 100.")
+        destinations = []
+        for mode in modes:
+            destination = RoutingDestination.objects.create(name=mode + " invoices", module_name=model(mode, "sales_invoice")._meta.app_label,
+                                                            target_model=model(mode, "sales_invoice").__name__)
+            RoutingRule.objects.create(name=mode, destination=destination, instructions="Match this invoice.")
+            destinations.append(destination)
+        payload = {"request_id": str(uuid4()), "document_ids": [document.pk],
+                   "revisions": {str(document.pk): document.updated_at.isoformat()}}
+        response = {"message": {"content": json.dumps({"routes": [
+            {"destination_id": destination.pk, "reason": "Matches the rule.", "confidence": 0.95}
+            for destination in destinations]})}}
+        return payload, response
+
+    def test_routing_automatically_extracts_both_modules_and_replay_is_idempotent(self):
+        for mode in ("ap", "ar"):
+            self.account(mode)
+            self.config(mode)
+        payload, routing_response = self.route_request()
+        self.provider.side_effect = lambda *args, **kwargs: {"message": {"content": json.dumps(
+            self.output("ap" if kwargs["config_prefix"] == "ACCOUNTS_PAYABLE" else "ar"))}}
+        with patch.dict(os.environ, {"ROUTER_LLM_PROVIDER": "ollama", "ROUTER_OLLAMA_MODEL": "routing-test"}), \
+                patch("router.services.llm.invoke", new_callable=AsyncMock, return_value=routing_response) as routing_provider:
+            response = self.client.post("/router/execute/", payload, content_type="application/json")
+            self.assertEqual(response.status_code, 200, response.content)
+            self.assertEqual(response.json()["accounting"]["completed"], 2)
+            self.assertEqual(set(DocumentRoute.objects.values_list("processing_status", flat=True)), {"completed"})
+            # Machine execution must not masquerade as a human review.
+            self.assertEqual(set(DocumentRoute.objects.values_list("review_status", flat=True)), {"pending"})
+            for mode in ("ap", "ar"):
+                invoice = model(mode, "sales_invoice").objects.get()
+                self.assertEqual(invoice.lines.count(), 1)
+                log = model(mode, "LLMExtractionLog").objects.get()
+                self.assertEqual(log.status, "completed")
+                self.assertEqual(log.sales_invoice_id, invoice.pk)
+                self.assertEqual(log.fk_document_no_id, payload["document_ids"][0])
+            replay = self.client.post("/router/execute/", payload, content_type="application/json")
+            self.assertEqual(replay.status_code, 200, replay.content)
+            routing_provider.assert_awaited_once()
+            self.assertEqual(self.provider.await_count, 2)
+            self.assertEqual(DocumentRoute.objects.count(), 2)
+
+    def test_failed_automatic_extraction_keeps_other_destination_and_can_be_retried(self):
+        for mode in ("ap", "ar"):
+            self.account(mode)
+            self.config(mode)
+        payload, routing_response = self.route_request()
+        self.provider.side_effect = [RuntimeError("Provider unavailable"), {"message": {"content": json.dumps(self.output())}}]
+        with patch.dict(os.environ, {"ROUTER_LLM_PROVIDER": "ollama", "ROUTER_OLLAMA_MODEL": "routing-test"}), \
+                patch("router.services.llm.invoke", new_callable=AsyncMock, return_value=routing_response):
+            response = self.client.post("/router/execute/", payload, content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["accounting"], {"completed": 1, "failed": 1, "pending": 0, "processing": 0})
+        self.assertEqual(LLMRoutingLog.objects.get().status, "completed")
+        failed = DocumentRoute.objects.get(processing_status="failed")
+        self.assertTrue(failed.processing_error)
+        self.assertEqual(model("ar", "sales_invoice").objects.count(), 1)
+        self.assertEqual(model("ap", "sales_invoice").objects.count(), 0)
+        self.provider.side_effect = None
+        self.respond(self.output("ap"))
+        retry = self.client.post(f"/router/api/routes/{failed.pk}/review/", {
+            "decision": "approved", "revision": failed.updated_at.isoformat()}, content_type="application/json")
+        self.assertEqual(retry.status_code, 200, retry.content)
+        self.assertEqual(retry.json()["record"]["processing_status"], "completed")
+
+    def test_missing_automatic_configuration_is_reported_without_calling_accounting_provider(self):
+        payload, routing_response = self.route_request(("ar",))
+        with patch.dict(os.environ, {"ROUTER_LLM_PROVIDER": "ollama", "ROUTER_OLLAMA_MODEL": "routing-test"}), \
+                patch("router.services.llm.invoke", new_callable=AsyncMock, return_value=routing_response):
+            response = self.client.post("/router/execute/", payload, content_type="application/json")
+            self.assertEqual(response.status_code, 200, response.content)
+            self.assertEqual(response.json()["accounting"]["failed"], 1)
+            self.assertIn("configuration", DocumentRoute.objects.get().processing_error)
+            self.client.post("/router/execute/", payload, content_type="application/json")
+        self.provider.assert_not_awaited()
+        self.assertFalse(model("ar", "LLMExtractionLog").objects.exists())
+
+    def test_automatic_processing_still_blocks_rejected_and_stale_routes(self):
+        self.config()
+        route = self.route()
+        route.review_status = "rejected"
+        route.save()
+        with self.assertRaises(ValidationError):
+            process(route.pk, automatic=True)
+        route.review_status = "pending"
+        route.save()
+        document = route.routing_log.source_document
+        document.file_name = "Changed.txt"
+        document.save()
+        from router.services.handoff import process_matches
+        process_matches(route.routing_log_id)
+        route.refresh_from_db()
+        self.assertEqual(route.processing_status, "failed")
+        self.assertIn("changed", route.processing_error)
+        self.provider.assert_not_awaited()
+
+    def test_explicit_retry_resumes_failed_pending_review_without_reclassifying(self):
+        for mode in ("ap", "ar"):
+            self.account(mode)
+            first = self.config(mode)
+            self.config(mode)  # Retry can choose among submitted configurations.
+            route = self.route(mode)
+            route.review_status = "pending"
+            route.processing_status = "failed"
+            route.processing_error = "Previous provider error"
+            route.save()
+            self.respond(self.output(mode))
+            url = f"/router/api/routes/{route.pk}/process/"
+            payload = {"revision": route.updated_at.isoformat(), "configuration_id": first.pk}
+            with patch("router.services.llm.invoke", new_callable=AsyncMock) as classifier:
+                response = self.client.post(url, payload, content_type="application/json")
+                self.assertEqual(response.status_code, 200, response.content)
+                result = response.json()["record"]
+                self.assertEqual(result["processing_status"], "completed", result["processing_error"])
+                self.assertEqual(result["review_status"], "pending")
+                self.assertTrue(result["record_url"])
+                calls = self.provider.await_count
+                replay = self.client.post(url, payload, content_type="application/json")
+                self.assertEqual(replay.status_code, 200, replay.content)
+                self.assertEqual(self.provider.await_count, calls)
+                classifier.assert_not_awaited()
+            self.assertEqual(model(mode, "sales_invoice").objects.count(), 1)
+
+    def test_explicit_retry_rejects_stale_revisions_rejected_and_superseded_routes(self):
+        self.config()
+        route = self.route()
+        url = f"/router/api/routes/{route.pk}/process/"
+        self.assertEqual(self.client.get(url).status_code, 405)
+        self.assertEqual(self.client.post(url, {}, content_type="application/json").status_code, 400)
+        payload = {"revision": route.updated_at.isoformat()}
+        route.review_notes = "Changed in another tab"
+        route.save()
+        self.assertEqual(self.client.post(url, payload, content_type="application/json").status_code, 409)
+        route.review_status = "rejected"
+        route.save()
+        payload["revision"] = route.updated_at.isoformat()
+        self.assertEqual(self.client.post(url, payload, content_type="application/json").status_code, 400)
+        route.review_status = "pending"
+        route.save()
+        self.route(document=route.routing_log.source_document)
+        payload["revision"] = route.updated_at.isoformat()
+        self.assertEqual(self.client.post(url, payload, content_type="application/json").status_code, 400)
+        self.provider.assert_not_awaited()
+
+    def test_rerouting_waits_for_accounting_extraction_to_finish(self):
+        payload, routing_response = self.route_request(("ar",))
+        document = Document.objects.get(pk=payload["document_ids"][0])
+        route = self.route(document=document)
+        route.processing_status = "processing"
+        route.save()
+        with patch.dict(os.environ, {"ROUTER_LLM_PROVIDER": "ollama", "ROUTER_OLLAMA_MODEL": "routing-test"}), \
+                patch("router.services.llm.invoke", new_callable=AsyncMock, return_value=routing_response) as classifier:
+            response = self.client.post("/router/execute/", payload, content_type="application/json")
+            self.assertEqual(response.status_code, 400, response.content)
+            self.assertIn("AP/AR extraction", response.json()["message"])
+            classifier.assert_not_awaited()
+        self.assertEqual(LLMRoutingLog.objects.count(), 1)
+        self.provider.assert_not_awaited()
 
     def test_all_supported_targets_create_the_correct_module_record(self):
         for mode in ('ap','ar'):

@@ -250,7 +250,7 @@ class RecordSetupTests(TestCase):
                 self.assertNotIn('expected', request)
                 self.assertEqual(model(mode, 'ExtractionConfiguration').objects.count(), 0)
 
-    def test_confirmed_save_requires_current_passing_test_and_keeps_annotations(self):
+    def test_confirmed_save_requires_current_test_and_keeps_annotations(self):
         for mode in ('ap', 'ar'):
             values, expected, output = self.document(mode)
             body = {'configuration': values, 'submit': True}
@@ -271,7 +271,7 @@ class RecordSetupTests(TestCase):
             changed = deepcopy(body); changed['configuration']['name'] = 'Changed after test'
             self.assertEqual(self.post(mode, 'setup-review', changed).status_code, 400)
 
-    def test_missing_mismatched_and_unverified_results_never_receive_a_receipt(self):
+    def test_completed_tests_with_issues_receive_review_receipts(self):
         values, expected, output = self.document('ap')
         for change in ('missing', 'different', 'unverified'):
             current = deepcopy(output)
@@ -280,7 +280,32 @@ class RecordSetupTests(TestCase):
             response = self.post('ap', 'setup-test', {'configuration': values, 'text': 'Code: DEMO-001\nName: Example Trading', 'expected': {} if change == 'unverified' else expected})
             self.assertEqual(response.status_code, 200, response.content)
             self.assertFalse(response.json()['passed'])
-            self.assertIsNone(response.json()['test_token'])
+            self.assertTrue(response.json()['test_token'])
+
+    def test_document_issues_can_be_reviewed_and_saved_in_both_modules(self):
+        for mode in ('ap', 'ar'):
+            with self.subTest(mode=mode):
+                values, expected, output = self.document(mode)
+                output['record'][party_key(mode)+'_code'] = None
+                self.respond(output)
+                tested = self.post(mode, 'setup-test', {'configuration': values,
+                    'text': values['setup_data']['document']['text'], 'expected': expected})
+                self.assertEqual(tested.status_code, 200, tested.content)
+                result = tested.json()
+                self.assertFalse(result['passed'])
+                body = {'configuration': values, 'submit': True, 'test_token': result['test_token']}
+                reviewed = self.post(mode, 'setup-review', body)
+                self.assertEqual(reviewed.status_code, 200, reviewed.content)
+                self.assertEqual(reviewed.json()['test_issues'], result['issues'])
+                body['confirmation_token'] = reviewed.json()['confirmation_token']
+                self.assertEqual(self.post(mode, 'setup-save', body).status_code, 400)
+                saved = self.post(mode, 'setup-save', {**body, 'confirmed': True})
+                self.assertEqual(saved.status_code, 200, saved.content)
+                self.assertEqual(saved.json()['record']['status'], 'submitted')
+                self.assertEqual(model(mode, party_key(mode).title()).objects.count(), 0)
+                changed = deepcopy(body)
+                changed['configuration']['setup_data']['document']['prompt'] += ' Changed'
+                self.assertEqual(self.post(mode, 'setup-review', changed).status_code, 400)
 
     def test_source_text_edits_require_new_annotation_offsets(self):
         values, _, _ = self.document('ar')
@@ -431,7 +456,7 @@ class RecordSetupTests(TestCase):
             response = self.post('ap', 'setup-test', {'configuration': values, 'text': values['setup_data']['document']['text'], 'expected': expected})
             self.assertEqual(response.status_code, 200, response.content)
             self.assertFalse(response.json()['passed'])
-            self.assertIsNone(response.json()['test_token'])
+            self.assertTrue(response.json()['test_token'])
 
     def test_old_save_endpoints_cannot_bypass_record_first_test_receipts(self):
         for mode in ('ap', 'ar'):

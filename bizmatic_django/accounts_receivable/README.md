@@ -13,9 +13,12 @@ rules. Their identical workspace operations share small services in
 2. In Extraction setup, create a document configuration for the target record.
    Write the instructions and account lookup rules, then review and submit it.
 3. Route saved extracted text from Documents or Batches.
-4. Approve each destination. Approval starts accounting extraction using the one
-   submitted module-wide configuration for that target. If several configurations
-   exist, choose one in the route's processing controls and click Process record.
+4. Each LLM-matched destination starts accounting extraction automatically using
+   the one submitted module-wide document configuration for its target. Human
+   review remains pending. If processing fails, use Retry extraction on the route
+   or its routing log. If
+   several configurations exist, choose one in the route's processing controls
+   and click Process record. Manually added destinations process on approval.
 5. Open the created accounting record or its LLM attempt from the route.
 
 One route creates one header and its lines. Multiple destinations are processed
@@ -65,6 +68,14 @@ Amounts are stored and validated with Decimal. Dashboard/aging summaries select
 one currency and use the current application date. Currency conversion is not
 implemented. Only cleared payments settle invoices.
 
+Both overview dashboards show Total PO amount and Open order amount using saved
+order header totals. AP summarizes company POs; AR summarizes customer POs.
+Total PO amount includes draft, open, and closed orders and excludes cancelled
+orders. Open order amount includes only orders marked open and represents their
+full order value, rather than an uninvoiced or undelivered remainder. Both cards
+show order counts and respect the report currency, including currencies found
+only on purchase orders.
+
 ## Files
 
 - `models.py`, `migrations/`: plain models and schema changes.
@@ -76,7 +87,7 @@ implemented. Only cleared payments settle invoices.
 - Shared `services/imports.py`: bounded PostgreSQL imports and run history.
 - Shared `services/records.py`: account, case, match and allocation writes.
 - Shared `services/pages.py`, `http.py`: page data and JSON action handling.
-- `router/services/handoff.py`: approved route processing and retry status.
+- `router/services/handoff.py`: automatic route extraction, approval, and retry status.
 
 ## Setup and limits
 

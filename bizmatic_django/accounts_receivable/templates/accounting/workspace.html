@@ -1,6 +1,6 @@
 {% extends 'document_extraction/base.html' %}
 {% load static %}
-{% block extra_styles %}<link rel="stylesheet" href="{% static 'accounting/workspace.css' %}?v=concept-c-1"><link rel="stylesheet" href="{% static 'accounting/configuration.css' %}?v=actions-spacing-2"><link rel="stylesheet" href="{% static 'accounting/llm-logs.css' %}?v=concept-c-1">{% endblock %}
+{% block extra_styles %}<link rel="stylesheet" href="{% static 'accounting/workspace.css' %}?v=order-amounts-1"><link rel="stylesheet" href="{% static 'accounting/configuration.css' %}?v=actions-spacing-2"><link rel="stylesheet" href="{% static 'accounting/llm-logs.css' %}?v=concept-c-1">{% endblock %}
 {% block workspace_title %}Finance &amp; reconciliation workspace{% endblock %}
 {% block content %}
 <div class="finance-workspace" data-mode="{{ finance_config.mode }}">
@@ -17,4 +17,4 @@
 {{ finance_state|json_script:'finance-state' }}
 {% endblock %}
 {% block workspace_footer %}<span>Bizmatic · {{ workspace_name }}</span><span>Orders → Deliveries → Invoices → Payments</span>{% endblock %}
-{% block scripts %}{% if finance_resource == 'llm-logs' %}<script src="{% static 'document_extraction/vendors/marked.js' %}" defer></script>{% endif %}<script src="{% static 'accounting/api.js' %}?v=backend-1" defer></script><script src="{% static 'accounting/configuration-delete.js' %}?v=delete-2" defer></script><script src="{% static 'accounting/llm-logs.js' %}?v=backend-1" defer></script><script src="{% static 'accounting/workspace.js' %}?v=full-migration-1" defer></script><script src="{% static 'accounting/configuration-schema.js' %}?v=optional-lines-1" defer></script><script src="{% static 'accounting/configuration.js' %}?v=optional-lines-1" defer></script>{% endblock %}
+{% block scripts %}{% if finance_resource == 'llm-logs' %}<script src="{% static 'document_extraction/vendors/marked.js' %}" defer></script>{% endif %}<script src="{% static 'accounting/api.js' %}?v=backend-1" defer></script><script src="{% static 'accounting/configuration-delete.js' %}?v=delete-2" defer></script><script src="{% static 'accounting/llm-logs.js' %}?v=backend-1" defer></script><script src="{% static 'accounting/workspace.js' %}?v=order-amounts-1" defer></script><script src="{% static 'accounting/configuration-schema.js' %}?v=optional-lines-1" defer></script><script src="{% static 'accounting/configuration.js' %}?v=optional-lines-1" defer></script>{% endblock %}

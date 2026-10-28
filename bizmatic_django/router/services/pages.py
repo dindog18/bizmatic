@@ -85,7 +85,8 @@ def workspace_state(screen, record_id):
         "rules": [rule(row) for row in RoutingRule.objects.all()],
         "documents": [{"id": doc.pk, "name": doc.file_name, "type": doc.document_type,
                        "party": f"Document #{doc.pk}", "batch": f"Batch #{doc.fk_batch_no_id}" if doc.fk_batch_no_id else "No batch",
-                       "created": doc.created_at.isoformat(), "revision": doc.updated_at.isoformat(), "text": ""} for doc in documents],
+                       "created": doc.created_at.isoformat(), "revision": doc.updated_at.isoformat(),
+                       "review_status": doc.review_status, "processing_status": doc.processing_status, "text": ""} for doc in documents],
         "logs": [log(row, full=screen in {"document", "log"}) for row in attempts],
         "routes": [route(row) for row in DocumentRoute.objects.filter(routing_log_id__in=[row.pk for row in attempts])],
     }

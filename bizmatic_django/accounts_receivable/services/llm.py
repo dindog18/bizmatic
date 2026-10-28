@@ -53,6 +53,14 @@ def run(mode, configuration, purpose, system, context, route=None, response_sche
             body.update(format=response_schema or "json", options={"num_predict": tokens, **({"temperature": 0} if response_schema else {})}, stream=False)
         else:
             body["response_format"] = {"type": "json_object"}
+        # Alibaba's hybrid DeepSeek V4 models default to thinking. Reasoning
+        # consumes the same output budget and can leave no JSON to validate.
+        # This is a raw HTTP body (not the OpenAI SDK's extra_body wrapper).
+        if provider == "alibaba" and name.lower().startswith("deepseek-v4"):
+            thinking = get_env(f"{prefix}_ALIBABA_ENABLE_THINKING", "false").strip().lower()
+            if thinking not in {"true", "false"}:
+                raise ValueError(f"{prefix}_ALIBABA_ENABLE_THINKING must be true or false.")
+            body["enable_thinking"] = thinking == "true"
         log.request_payload = body
         log.save(update_fields=["request_payload", "updated_at"])
         if provider not in {"openai", "anthropic", "google", "ollama", "alibaba", "deepseek"} or not name:
@@ -65,7 +73,11 @@ def run(mode, configuration, purpose, system, context, route=None, response_sche
         if (result.get("stop_reason") == "max_tokens" or result.get("done_reason") == "length"
                 or any(row.get("finish_reason") == "length" for row in result.get("choices", []))
                 or any(row.get("finishReason") == "MAX_TOKENS" for row in result.get("candidates", []))):
-            raise ValueError("The accounting response was truncated. Increase the output limit and retry.")
+            raise ValueError(
+                f"The accounting response reached its {tokens:,}-token output limit before completing JSON. "
+                f"Increase {prefix}_MAX_OUTPUT_TOKENS, restart the application, and retry. "
+                "Reasoning tokens also consume the output budget on thinking models."
+            )
         raw = log.markdown_text.strip()
         fenced = re.fullmatch(r"```(?:json)?\s*([\s\S]*?)\s*```", raw)
         parsed = json.loads(fenced.group(1) if fenced else raw)

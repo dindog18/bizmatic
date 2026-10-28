@@ -31,7 +31,7 @@
   };
   ui.apiURL = (name, id, kind) => ui.config.api[name].replace("/0/", `/${Number(id)}/`).replace("/destinations/", `/${kind || "destinations"}/`);
   ui.pendingRequests = new Set();
-  ui.post = async (url, data) => {
+  ui.request = async (url, data) => {
     if (ui.pendingRequests.has(url)) throw new Error("Please wait for the current save to finish.");
     ui.pendingRequests.add(url);
     try {
@@ -39,10 +39,11 @@
         headers: { "Content-Type": "application/json", "X-CSRFToken": config.csrfToken }, body: JSON.stringify(data) });
       let result;
       try { result = await response.json(); } catch { throw new Error("The server did not return a valid response. Reload and check the saved record before trying again."); }
-      if (!response.ok) throw new Error(result.message || "The record could not be saved.");
-      return result.record;
+      if (!response.ok) throw Object.assign(new Error(result.message || "The record could not be saved."), { result });
+      return result;
     } finally { ui.pendingRequests.delete(url); }
   };
+  ui.post = async (url, data) => (await ui.request(url, data)).record;
   ui.heading = (title, description, action = "") => `<div class="router-heading"><div><h1>${ui.esc(title)}</h1><p>${ui.esc(description)}</p></div><div class="d-flex flex-wrap gap-2">${action}</div></div>`;
   ui.card = (title, content) => `<section class="card mb-4"><div class="card-header"><h2 class="fs-9 mb-0">${ui.esc(title)}</h2></div>${content}</section>`;
   ui.empty = (title, text, action = "") => `<div class="router-empty"><h2>${ui.esc(title)}</h2><p class="text-600">${ui.esc(text)}</p>${action}</div>`;
@@ -59,6 +60,6 @@
   ui.openDialog = (title, content) => {
     const dialog = document.getElementById("router-dialog");
     dialog.innerHTML = `<div class="router-dialog-header"><h2 id="router-dialog-title">${ui.esc(title)}</h2><button type="button" class="btn-close" aria-label="Close dialog" data-action="close-dialog"></button></div><div class="router-dialog-body">${content}</div>`;
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
   };
 })();

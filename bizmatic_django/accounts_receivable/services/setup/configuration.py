@@ -48,7 +48,7 @@ def validate_setup(record, mode, submit=False):
                 'tables': {alias: {'id': table.pk, 'name': str(table)} for alias, table in metadata['tables'].items()}}
 
 
-def clean_output(mode, config, result):
+def clean_output(mode, config, result, *, include_model_issues=True):
     """Validate types, account lookups and required values without creating accounting records."""
     from ..extraction import normalize_lines, values_for, validate_totals
     issues = []
@@ -57,7 +57,8 @@ def clean_output(mode, config, result):
     raw_lines = result.get('lines') if result.get('lines') is not None else []
     if not isinstance(raw_lines, list):
         raise ValidationError('Line items must be an array; use [] when there are none.')
-    issues.extend(str(issue) for issue in result.get('issues', []))
+    if include_model_issues:
+        issues.extend(str(issue) for issue in result.get('issues', []))
     has_lines = config.target_entity in {'purchase_order', 'delivery_receipt', 'sales_invoice'}
     if not has_lines and raw_lines:
         issues.append('This record type does not have line items.')

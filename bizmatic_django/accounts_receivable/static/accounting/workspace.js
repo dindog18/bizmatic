@@ -59,7 +59,7 @@
   const heading = (title, description, actions = '') => `<header class="finance-heading"><div><h1>${esc(title)}</h1><p>${description}</p></div><div class="finance-actions">${actions}</div></header>`;
   const card = (title, body, action = '', subtitle = '') => `<section class="card mb-4"><div class="finance-card-head"><div><h2>${title}</h2>${subtitle ? `<div class="finance-card-subtitle">${subtitle}</div>` : ''}</div>${action}</div>${body}</section>`;
   const meta = (items, vertical = false) => `<dl class="finance-meta ${vertical ? 'vertical' : ''}">${items.map(([name,value]) => `<div><dt>${esc(name)}</dt><dd>${value}</dd></div>`).join('')}</dl>`;
-  const kpi = (name, value, note, symbol, monetary = false) => `<div class="card finance-kpi"><div class="kpi-label">${esc(name)}${icon(symbol)}</div><div class="kpi-value">${monetary ? `<small>${esc(moneyCurrency)}</small>` : ''}${esc(value)}</div><div class="kpi-note">${esc(note)}</div></div>`;
+  const kpi = (name, value, note, symbol, monetary = false, href = '') => `<div class="card finance-kpi"><div class="kpi-label">${esc(name)}${icon(symbol)}</div><div class="kpi-value">${monetary ? `<small>${esc(moneyCurrency)}</small>` : ''}${esc(value)}</div><div class="kpi-note">${esc(note)}</div>${href ? a(href, 'View orders ' + icon('arrow-right'), 'kpi-link') : ''}</div>`;
   const empty = (title, description, action = '') => `<div class="finance-empty"><span class="empty-icon">${icon('search')}</span><h2>${esc(title)}</h2><p>${esc(description)}</p>${action}</div>`;
 
   function extractionActions() {
@@ -86,7 +86,13 @@
     const late = open.filter(row => overdueDays(row) > 0);
     const exceptions = data.reconciliation.filter(row => row.status === 'exception');
     const unallocated = total(data.payments.filter(row => row.status !== 'reversed' && row.currency===reportCurrency), row => available(row));
+    const orders = data['purchase-orders'].filter(row => row.currency === reportCurrency && row.status !== 'cancelled');
+    const openOrders = orders.filter(row => row.status === 'open');
+    // Sum saved header totals once per order, in cents; item lines must not
+    // multiply an order's value or mix currencies in the report.
+    const orderAmount = rows => total(rows, row => Math.round(row.amount * 100)) / 100;
     root.innerHTML = heading(config.title, ar ? 'Keep collections moving, from customer orders to the final payment.' : 'Know what you owe, resolve discrepancies, and prepare supplier payments.', extractionActions()) +
+      `<div class="finance-kpis finance-order-kpis" aria-label="${ar ? 'Customer' : 'Company'} purchase order amounts">${kpi('Total PO amount', money(orderAmount(orders)), `${orders.length.toLocaleString('en-PH')} ${ar ? 'customer' : 'company'} PO${orders.length === 1 ? '' : 's'} · Draft, open & closed · ${reportCurrency} only`, 'shopping-cart', true, url('purchase-orders'))}${kpi('Open order amount', money(orderAmount(openOrders)), `${openOrders.length.toLocaleString('en-PH')} open order${openOrders.length === 1 ? '' : 's'} · ${reportCurrency} only`, 'clipboard-list', true, url('purchase-orders') + '?status=open')}</div>` +
       `<div class="finance-kpis">${kpi(ar ? 'Total receivables' : 'Total payables', money(total(open,balance)), `${open.length} open invoices · ${esc(reportCurrency)} only`, 'wallet', true)}${kpi('Overdue balance',money(total(late,balance)),`${late.length} invoices need attention`,'clock',true)}${kpi(ar ? 'Unallocated receipts' : 'Unallocated payments',money(unallocated),'Cash available across non-reversed payments','credit-card',true)}${kpi('Matching exceptions',exceptions.length,'Cases with document discrepancies','exclamation-triangle')}</div>` +
       `<div class="finance-grid">${card(ar ? 'Collection priorities' : 'Payment priorities', invoiceTable([...open].sort((a,b) => a.dueDate.localeCompare(b.dueDate)).slice(0,5)), a(url('invoices')+'?status=unpaid','View invoices '+icon('arrow-right')), 'Outstanding invoices, earliest due first')}
       <div>${card('Aging at a glance',`<div class="finance-card-body">${agingGroups().map(group => `<div class="finance-aging-row"><span>${group.name}</span><div class="finance-aging-bar"><span style="width:${total(open,balance) ? group.amount / total(open,balance) * 100 : 0}%;background:${group.color}"></span></div><strong class="text-end">${money(group.amount)}</strong></div>`).join('')}<p class="text-600 fs-11 mb-0 mt-3">Outstanding ${esc(reportCurrency)} · As of ${date(data.today)}</p></div>`,a(url('aging'),'Full report '+icon('arrow-right')))}
@@ -417,7 +423,7 @@
     });
   }
 
-  const currencies=[...new Set(['PHP',...data.invoices.map(row=>row.currency),...data.payments.map(row=>row.currency)])].filter(Boolean);
+  const currencies=[...new Set(['PHP',...data['purchase-orders'].map(row=>row.currency),...data.invoices.map(row=>row.currency),...data.payments.map(row=>row.currency)])].filter(Boolean);
   if(['overview','aging','parties'].includes(resource)) {
     const wrapper=document.createElement('div');wrapper.className='d-flex justify-content-end gap-2 mb-3';
     wrapper.innerHTML=`<label for="report-currency">Report currency</label><select id="report-currency" class="form-select w-auto">${currencies.map(value=>`<option ${value===reportCurrency?'selected':''} value="${esc(value)}">${esc(value)}</option>`).join('')}</select>`;
