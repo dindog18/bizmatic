@@ -8,11 +8,36 @@
   const copy=value=>JSON.parse(JSON.stringify(value));
   const sessions=new Map();
   let context,active,target,source;
+  let progressStore,progressError='';
   const parameters=new URLSearchParams(location.search);
   const mandatory={date_format:'YYYY-MM-DD',decimal_separator:'.',thousands_separator:',',default_currency:'PHP',duplicate_policy:'review',missing_value_policy:'review'};
   const currentCatalog=()=>context.catalog.find(item=>item.key===target);
   const key=()=>target+':'+source;
   function fresh(){return {profile:{name:currentCatalog().label+' '+(source==='database'?'database':'document')+' setup',description:'',target_entity:target,source_type:source,revision:1,[config.mode==='ap'?'supplier':'customer']:null,encoding_rules:{...mandatory}},editor:null,messages:[],testToken:null,hasUnsaved:true};}
+  function progressScope(){return {mode:config.mode,target,id:active.profile.id||null,revision:active.profile.revision};}
+  function progressStatus(message){
+    const status=document.getElementById('setup-progress-status');
+    if(status){status.textContent=message;status.hidden=false;}
+  }
+  function saveProgress(){
+    if(source!=='document'||!active.editor||active.editor.confirmed)return;
+    try{
+      if(!progressStore)throw new Error('Browser storage unavailable');
+      progressStore.save(progressScope(),active);
+      progressError='';progressStatus('Progress saved in this browser.');
+    }catch(_){progressError='Progress could not be saved in this browser. Keep this page open until you save the configuration.';progressStatus(progressError);}
+  }
+  function restoreProgress(){
+    if(source!=='document'||!progressStore)return;
+    try{
+      const saved=progressStore.load(progressScope());
+      if(saved){Object.assign(active,saved);active.editor.notice='Saved progress restored.'+(active.editor.result&&!active.testToken?' Run the mapping test again before reviewing and saving.':'');}
+    }catch(_){progressError='Browser progress storage is unavailable. Keep this page open until you save the configuration.';}
+  }
+  function clearProgress(){
+    if(source!=='document'||!progressStore)return;
+    try{progressStore.remove(progressScope());}catch(_){progressError='Saved browser progress could not be cleared. Check browser storage before leaving this page.';}
+  }
   function legacyDatabase(record){
     const definition=currentCatalog(),lineAlias=record.line_source_table?'lines':'base';
     const mappings=[...definition.fields.map(field=>({...field,group:'header'})),...definition.lineFields.map(field=>({...field,group:'line'}))].map(field=>{
@@ -111,17 +136,18 @@
       dialog.querySelector('#setup-confirm-check').addEventListener('change',event=>{dialog.querySelector('#setup-confirm-save').disabled=!event.target.checked;});
       dialog.querySelector('form').addEventListener('submit',async event=>{
         event.preventDefault();if(!dialog.querySelector('#setup-confirm-check').checked)return;
-        try{const result=await post('setup-save',{...payload(),submit,test_token:active.testToken,confirmation_token:reviewed.confirmation_token,confirmed:true,messages:active.messages});active.profile=result.record;active.testToken=null;active.hasUnsaved=false;active.importRequest=null;dialog.close();reflectSaved();resolve(true);}catch(error){showError(error);dialog.close();resolve(false);}
+        try{const result=await post('setup-save',{...payload(),submit,test_token:active.testToken,confirmation_token:reviewed.confirmation_token,confirmed:true,messages:active.messages});clearProgress();active.profile=result.record;active.testToken=null;active.hasUnsaved=false;active.importRequest=null;dialog.close();reflectSaved();resolve(true);}catch(error){showError(error);dialog.close();resolve(false);}
       });
     });
   }
-  function editorApi(){return {
+  function editorApi(){const session=active;return {
     error:showError,changed,clearChat:()=>{active.messages=[];},hasReceipt:()=>!!active.testToken,hasMigrationReceipt:()=>!!active.migrationTestToken,review,
+    progress:editor=>{session.editor=editor;if(active===session)saveProgress();},
     document:id=>post('setup-document',{document_id:id},null),
     generate:(editor,feedback)=>post('setup-generate',{...payload(),...(feedback?{feedback}:{})}),
     recheckDocument:async (text,expected,log)=>{const result=await post('setup-test',{...payload(),text,expected,reuse_log:log});return result;},
-    acceptRecheck:token=>{active.testToken=token;},
-    testDocument:async (editor,text,expected)=>{const result=await post('setup-test',{...payload(),text,expected});active.testToken=result.test_token;return result;},
+    acceptRecheck:token=>{active.testToken=token;active.testedAt=Date.now();},
+    testDocument:async (editor,text,expected)=>{const result=await post('setup-test',{...payload(),text,expected});active.testToken=result.test_token;active.testedAt=Date.now();return result;},
     testDatabase:async (editor,limit)=>{const result=await post('setup-test',{...payload(),limit});active.testToken=result.test_token;active.migrationTestToken=result.migration_test_token;reflectSaved();return result;},
     previewDatabase:settings=>post('setup-preview',{...payload(),...settings}),
     refresh:async id=>{const result=await post('setup-context',{inspect_source:id});context.sources=result.sources;changed();return result;},
@@ -129,7 +155,7 @@
   };}
   function render(){
     const definition=currentCatalog();
-    root.innerHTML=`<div class='lab'><header class='finance-heading lab-heading'><div><span class='finance-eyebrow'>RECORD FIRST · EXTRACTION SETUP</span><h1 class='mt-2'>Set up ${esc(definition.label.toLowerCase())}</h1><p>${source==='document'?'Choose sample text. Highlight values. Generate and test the extraction prompt.':'Prepare source data in steps, then match the final columns to your accounting fields.'}</p></div><div class='finance-actions'><span class='finance-status info' id='setup-saved-status'></span><span id='setup-delete-configuration'></span></div></header><div id='setup-error' class='finance-callout warning' role='alert' tabindex='-1' hidden></div><div class='finance-callout' id='setup-request-status' role='status' hidden></div><section class='card lab-scope' aria-label='Configuration selection'><div><label for='setup-workspace'>Workspace</label><select id='setup-workspace' class='form-select'><option value='ap'${config.mode==='ap'?' selected':''}>Accounts payable</option><option value='ar'${config.mode==='ar'?' selected':''}>Accounts receivable</option></select></div><div><label for='setup-record'>Record type</label><select id='setup-record' class='form-select'>${context.catalog.map(item=>`<option value='${item.key}'${item.key===target?' selected':''}>${esc(item.label)}</option>`).join('')}</select></div><fieldset><legend>Extraction source</legend><div class='lab-source-toggle'>${[['database','Database'],['document','Documents']].map(([value,label])=>`<label class='lab-source-choice${source===value?' active':''}'><input type='radio' name='setup-source' value='${value}'${source===value?' checked':''}>${label}</label>`).join('')}</div></fieldset><button type='button' class='btn btn-link lab-reset' data-setup='reset'>Start over</button></section><section class='card setup-profile'><div><label for='setup-name'>Configuration name</label><input id='setup-name' class='form-control' value='${esc(active.profile.name)}' maxlength='160' required></div><details><summary>Scope & formatting</summary><div class='finance-form-grid mt-3'><div><label for='setup-party'>Applies to</label><select id='setup-party' class='form-select'><option value=''>All ${config.party.toLowerCase()}s</option>${transport.state.parties.map(party=>`<option value='${party.id}'${String(active.profile[config.mode==='ap'?'supplier':'customer']||'')===String(party.id)?' selected':''}>${esc(party.reference+' · '+party.name)}</option>`).join('')}</select></div>${definition.fields.some(field=>field.type==='lookup')?`<div><label for='setup-lookup'>Match ${config.party.toLowerCase()} by</label><select id='setup-lookup' class='form-select'>${[[config.mode==='ap'?'supplier_code':'customer_code','Account code'],[config.mode==='ap'?'supplier_name':'customer_name','Account name'],['tax_identification_no','Tax ID']].map(([value,label])=>`<option value='${value}'${(active.profile.relation_lookups?.[config.mode==='ap'?'supplier':'customer']?.match_field||(config.mode==='ap'?'supplier_code':'customer_code'))===value?' selected':''}>${label}</option>`).join('')}</select></div>`:''}<div><label for='setup-date'>Source date format</label><select id='setup-date' class='form-select'>${['YYYY-MM-DD','DD/MM/YYYY','MM/DD/YYYY'].map(value=>`<option${active.profile.encoding_rules?.date_format===value?' selected':''}>${value}</option>`).join('')}</select></div><div><label for='setup-currency'>Default currency</label><input id='setup-currency' class='form-control' maxlength='3' value='${esc(active.profile.encoding_rules?.default_currency||'PHP')}'></div><div><label>Existing database records</label><p class='lab-note'>Matching source records are updated after a full review.</p></div><div class='finance-span-full'><label for='setup-description'>Business instructions</label><textarea id='setup-description' class='form-control' rows='2'>${esc(active.profile.description)}</textarea></div></div></details><div class='setup-profile-actions'><button type='button' class='btn btn-falcon-default btn-sm' data-setup='draft'>${source==='database'?'Review full migration':'Review & save draft'}</button><a href='${config.routes.configuration}'>All configurations</a></div></section><div id='setup-${source}-root'></div><div id='setup-migration-report'></div><div id='setup-update-root'></div><dialog id='setup-review-dialog' class='finance-dialog lab-dialog' aria-labelledby='setup-review-title'></dialog><dialog id='setup-reset-dialog' class='finance-dialog lab-dialog' aria-labelledby='setup-reset-title'></dialog></div>`;
+    root.innerHTML=`<div class='lab'><header class='finance-heading lab-heading'><div><span class='finance-eyebrow'>RECORD FIRST · EXTRACTION SETUP</span><h1 class='mt-2'>Set up ${esc(definition.label.toLowerCase())}</h1><p>${source==='document'?'Choose sample text. Highlight values. Generate and test the extraction prompt.':'Prepare source data in steps, then match the final columns to your accounting fields.'}</p></div><div class='finance-actions'><span class='finance-status info' id='setup-saved-status'></span><span id='setup-delete-configuration'></span></div></header><div id='setup-error' class='finance-callout warning' role='alert' tabindex='-1' hidden></div><div class='finance-callout' id='setup-request-status' role='status' hidden></div><div id='setup-progress-status' class='lab-note mb-3' role='status' hidden></div><section class='card lab-scope' aria-label='Configuration selection'><div><label for='setup-workspace'>Workspace</label><select id='setup-workspace' class='form-select'><option value='ap'${config.mode==='ap'?' selected':''}>Accounts payable</option><option value='ar'${config.mode==='ar'?' selected':''}>Accounts receivable</option></select></div><div><label for='setup-record'>Record type</label><select id='setup-record' class='form-select'>${context.catalog.map(item=>`<option value='${item.key}'${item.key===target?' selected':''}>${esc(item.label)}</option>`).join('')}</select></div><fieldset><legend>Extraction source</legend><div class='lab-source-toggle'>${[['database','Database'],['document','Documents']].map(([value,label])=>`<label class='lab-source-choice${source===value?' active':''}'><input type='radio' name='setup-source' value='${value}'${source===value?' checked':''}>${label}</label>`).join('')}</div></fieldset><button type='button' class='btn btn-link lab-reset' data-setup='reset'>Start over</button></section><section class='card setup-profile'><div><label for='setup-name'>Configuration name</label><input id='setup-name' class='form-control' value='${esc(active.profile.name)}' maxlength='160' required></div><details><summary>Scope & formatting</summary><div class='finance-form-grid mt-3'><div><label for='setup-party'>Applies to</label><select id='setup-party' class='form-select'><option value=''>All ${config.party.toLowerCase()}s</option>${transport.state.parties.map(party=>`<option value='${party.id}'${String(active.profile[config.mode==='ap'?'supplier':'customer']||'')===String(party.id)?' selected':''}>${esc(party.reference+' · '+party.name)}</option>`).join('')}</select></div>${definition.fields.some(field=>field.type==='lookup')?`<div><label for='setup-lookup'>Match ${config.party.toLowerCase()} by</label><select id='setup-lookup' class='form-select'>${[[config.mode==='ap'?'supplier_code':'customer_code','Account code'],[config.mode==='ap'?'supplier_name':'customer_name','Account name'],['tax_identification_no','Tax ID']].map(([value,label])=>`<option value='${value}'${(active.profile.relation_lookups?.[config.mode==='ap'?'supplier':'customer']?.match_field||(config.mode==='ap'?'supplier_code':'customer_code'))===value?' selected':''}>${label}</option>`).join('')}</select></div>`:''}<div><label for='setup-date'>Source date format</label><select id='setup-date' class='form-select'>${['YYYY-MM-DD','DD/MM/YYYY','MM/DD/YYYY'].map(value=>`<option${active.profile.encoding_rules?.date_format===value?' selected':''}>${value}</option>`).join('')}</select></div><div><label for='setup-currency'>Default currency</label><input id='setup-currency' class='form-control' maxlength='3' value='${esc(active.profile.encoding_rules?.default_currency||'PHP')}'></div><div><label>Existing database records</label><p class='lab-note'>Matching source records are updated after a full review.</p></div><div class='finance-span-full'><label for='setup-description'>Business instructions</label><textarea id='setup-description' class='form-control' rows='2'>${esc(active.profile.description)}</textarea></div></div></details><div class='setup-profile-actions'><button type='button' class='btn btn-falcon-default btn-sm' data-setup='draft'>${source==='database'?'Review full migration':'Review & save draft'}</button><a href='${config.routes.configuration}'>All configurations</a></div></section><div id='setup-${source}-root'></div><div id='setup-migration-report'></div><div id='setup-update-root'></div><dialog id='setup-review-dialog' class='finance-dialog lab-dialog' aria-labelledby='setup-review-title'></dialog><dialog id='setup-reset-dialog' class='finance-dialog lab-dialog' aria-labelledby='setup-reset-title'></dialog></div>`;
     reflectSaved();
     const api=editorApi();
     if(source==='document')active.editor=window.RecordSetupDocuments.mount(root.querySelector('#setup-document-root'),{destination:definition,state:active.editor,documents:context.documents,api});
@@ -137,9 +163,11 @@
       active.editor=window.RecordSetupDatabase.mount(root.querySelector('#setup-database-root'),{destination:definition,mode:config.mode,target,state:active.editor,sources:context.sources,api});
       if(active.editor.converted){delete active.editor.converted;changed();reflectSaved();}
     }
+    if(source==='document'&&progressError)progressStatus(progressError);
   }
   function select(nextTarget,nextSource){
-    sessions.set(key(),active);target=nextTarget;source=nextSource;active=sessions.get(key())||fresh();render();
+    saveProgress();sessions.set(key(),active);target=nextTarget;source=nextSource;active=sessions.get(key());
+    if(!active){active=fresh();restoreProgress();}render();
   }
   root.addEventListener('change',event=>{
     const el=event.target;
@@ -152,6 +180,7 @@
     else if(el.id==='setup-lookup'){active.profile.relation_lookups={[config.mode==='ap'?'supplier':'customer']:{match_field:el.value,on_missing:'review'}};changed();}
     else if(el.id==='setup-date'){active.profile.encoding_rules.date_format=el.value;changed();}
     else if(el.id==='setup-duplicates'){active.profile.encoding_rules.duplicate_policy=el.value;changed();}
+    saveProgress();
   });
   root.addEventListener('input',event=>{
     const el=event.target;
@@ -159,22 +188,24 @@
     if(el.id==='setup-name'){active.profile.name=el.value;changed();}
     else if(el.id==='setup-description'){active.profile.description=el.value;changed();}
     else if(el.id==='setup-currency'){active.profile.encoding_rules.default_currency=el.value.toUpperCase();changed();}
+    saveProgress();
   });
   root.addEventListener('click',async event=>{
     const button=event.target.closest('[data-setup]');if(!button)return;
     if(button.dataset.setup==='update'){await reviewMigration('update');}
     else if(button.dataset.setup==='draft'){try{if(await review(false))render();}catch(error){showError(error);}}
     else if(button.dataset.setup==='reset'){
-      const dialog=root.querySelector('#setup-reset-dialog');dialog.innerHTML=`<form><h2 id='setup-reset-title'>Reset this setup?</h2><p>Clear this conversation and its annotations, prompt, or query. The workspace, record type, and extraction source stay selected. ${active.profile.id?'The saved configuration returns to draft; earlier submissions remain in its audit history.':''}</p><div class='lab-dialog-actions'><button type='button' class='btn btn-falcon-default' data-cancel>Keep editing</button><button type='submit' class='btn btn-danger'>Reset setup</button></div></form>`;dialog.showModal();dialog.querySelector('[data-cancel]').addEventListener('click',()=>dialog.close());dialog.querySelector('form').addEventListener('submit',async event=>{event.preventDefault();try{let profile;if(active.profile.id){profile=(await post('configuration-reset-context',{selection:{target_entity:target,source_type:source},revision:active.profile.revision,confirmed:true})).record;}active=fresh();if(profile)active.profile=profile;sessions.set(key(),active);render();}catch(error){dialog.close();showError(error);}});
+      const dialog=root.querySelector('#setup-reset-dialog');dialog.innerHTML=`<form><h2 id='setup-reset-title'>Reset this setup?</h2><p>Clear this conversation and its annotations, prompt, or query. The workspace, record type, and extraction source stay selected. ${active.profile.id?'The saved configuration returns to draft; earlier submissions remain in its audit history.':''}</p><div class='lab-dialog-actions'><button type='button' class='btn btn-falcon-default' data-cancel>Keep editing</button><button type='submit' class='btn btn-danger'>Reset setup</button></div></form>`;dialog.showModal();dialog.querySelector('[data-cancel]').addEventListener('click',()=>dialog.close());dialog.querySelector('form').addEventListener('submit',async event=>{event.preventDefault();try{let profile;if(active.profile.id){profile=(await post('configuration-reset-context',{selection:{target_entity:target,source_type:source},revision:active.profile.revision,confirmed:true})).record;}clearProgress();active=fresh();if(profile)active.profile=profile;sessions.set(key(),active);render();}catch(error){dialog.close();showError(error);}});
     }
   });
   async function start(){
+    try{progressStore=window.DocumentSetupProgress.create(window.localStorage);}catch(_){progressError='Browser progress storage is unavailable.';}
     try{context=await transport.post('setup-context',config.recordId,{});const record=context.record;
       target=record?.target_entity||parameters.get('target')||parameters.get('record')||(config.mode==='ap'?'supplier':'customer');
       if(!context.catalog.some(item=>item.key===target))target=context.catalog[0].key;
       source=record?.source_type||(['document','database'].includes(parameters.get('source'))?parameters.get('source'):'document');
       active=fresh();if(record){active.profile=record;active.hasUnsaved=false;active.messages=record.assistant_messages||[];active.editor=record.setup_data?.[source]||null;if(!active.editor&&source==='database')active.editor=legacyDatabase(record);if(!record.setup_data?.version)active.hasUnsaved=true;if(!active.editor&&source==='document'&&record.sample_text)active.editor={text:record.sample_text,prompt:record.extraction_context,rules:{}};}
-      sessions.set(key(),active);render();
+      restoreProgress();sessions.set(key(),active);render();
     }catch(error){root.innerHTML=`<div class='finance-callout warning' role='alert'>${esc(error.message)}</div>`;}
   }
   start();

@@ -43,6 +43,28 @@ Assistant calls save proposals and logs, but applying suggestions to a draft and
 submitting that draft are separate user actions. Only one target record per
 source is supported in this MVP; split documents containing multiple invoices.
 
+### Resuming document setup
+
+The three-step Documents wizard automatically saves its current step, sample
+text, annotations, field rules, prompt, expected values, test results, and setup
+details in browser storage. Refreshing or reopening the same setup in the same
+browser restores that progress without calling the LLM. The page shows
+“Progress saved in this browser” after saving; storage failures show a message
+asking you to keep the page open.
+
+Progress is separate for AP and AR, each target record type, and each saved
+configuration. Drafts expire after seven days without a progress save. A change
+to a saved configuration's server revision discards the older browser draft.
+The existing 30-minute limit on signed mapping tests still applies; expired
+results remain visible but require another test before activation. Start over
+clears the current browser draft, and confirming a configuration save clears
+the draft for its previous URL.
+
+Browser progress does not activate or update an extraction configuration in the
+database. Continue to use Review & save to confirm those changes. Progress is
+specific to the browser and site address; it is not shared across devices or
+between local and deployed instances. No database migration is required.
+
 ## Database workflow
 
 Create and refresh a PostgreSQL connection in Database extraction. In accounting
@@ -114,6 +136,22 @@ route failed or retrying an import. There is no background queue or automatic
 retry. The workspace follows the existing application's access model; all POSTs
 require CSRF tokens. List pages load workspace records for client filtering, so
 server pagination is a later scaling improvement.
+
+When prompt generation works locally but a deployed page reports a non-JSON
+response, inspect the HTTP status and Nginx/application logs. A 504 can occur
+when Nginx stops waiting while the application finishes the LLM request; check
+LLM activity before retrying. A 502 can indicate a stopped application worker.
+Changing the LLM timeout alone does not change either server's timeout.
+
+For example, if an assistant request has a 120-second provider limit and may
+make one repair call, allow both calls plus overhead: set a Gunicorn worker
+timeout of 300 seconds (`--timeout 300`) and `proxy_read_timeout 310s;` in the
+existing Nginx location that proxies the application. Preserve the existing
+upstream, headers, and other deployment options. Adjust these example values
+to the actual provider limits and deployment capacity, validate Nginx with
+`nginx -t`, and restart/reload the affected services. Nginx defaults to a
+60-second upstream read timeout:
+https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_read_timeout
 
 Tests use a disposable database and mocked external providers/source reads.
 

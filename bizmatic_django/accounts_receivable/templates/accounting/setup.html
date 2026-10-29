@@ -19,10 +19,11 @@
 {% endblock %}
 {% block workspace_footer %}<span>Bizmatic · {{ workspace_name }}</span><span>Record first · Review before saving</span>{% endblock %}
 {% block scripts %}
-<script src="{% static 'accounting/api.js' %}?v=backend-1" defer></script><script src="{% static 'accounting/configuration-delete.js' %}?v=delete-2" defer></script>
+<script src="{% static 'accounting/api.js' %}?v=http-errors-1" defer></script><script src="{% static 'accounting/configuration-delete.js' %}?v=delete-2" defer></script>
 <script src="{% static 'accounting/setup/annotations.js' %}?v=record-first-2" defer></script>
 <script src="{% static 'accounting/setup/query-state.js' %}?v=full-migration-1" defer></script>
-<script src="{% static 'accounting/setup/documents.js' %}?v=review-with-issues-1" defer></script>
+<script src="{% static 'accounting/setup/document-progress.js' %}?v=1" defer></script>
+<script src="{% static 'accounting/setup/documents.js' %}?v=resume-1" defer></script>
 <script src="{% static 'accounting/setup/power-query.js' %}?v=power-query-2" defer></script>
-<script src="{% static 'accounting/setup/workspace.js' %}?v=review-with-issues-1" defer></script>
+<script src="{% static 'accounting/setup/workspace.js' %}?v=resume-1" defer></script>
 {% endblock %}

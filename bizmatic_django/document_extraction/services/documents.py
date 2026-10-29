@@ -8,6 +8,7 @@ from docx import Document
 from ..schemas.files import FileType, StoredFileMetadata
 from ..utils.file_types import identify_file_type_metadata
 from ..utils.markdown import markdown_table
+from . import parser_limits
 
 
 async def document_file_text_extraction(stored_file: StoredFileMetadata) -> str:
@@ -42,8 +43,15 @@ async def document_file_text_extraction(stored_file: StoredFileMetadata) -> str:
 def extract_pdf_to_markdown(file_path: Path) -> str:
     """Preserve PDF tables and reading order instead of flattening every cell."""
     parts = []
+    parser_limits.check_file_size(file_path)
     with pymupdf.open(file_path) as pdf:
+        if len(pdf) > parser_limits.MAX_PDF_PAGES:
+            raise ValueError('PDF exceeds the 100-page extraction limit. Split this PDF.')
+        total_edges = 0
         for page_number, page in enumerate(pdf, start=1):
+            total_edges += parser_limits.pdf_edge_cost(page)
+            if total_edges > parser_limits.MAX_DOCUMENT_EDGES:
+                raise ValueError('PDF exceeds the document table-complexity limit. Split this PDF.')
             tables = page.find_tables().tables
             regions = []
             elements = []
@@ -115,6 +123,7 @@ def extract_word_to_markdown(file_path: Path) -> str:
     """Convert a .docx file to basic Markdown, including headings and tables."""
     if file_path.suffix.lower() == ".doc":
         raise ValueError("Legacy .doc files are not directly supported. Convert the file to .docx first.")
+    parser_limits.check_office_archive(file_path)
     document = Document(str(file_path))
     parts = []
     # Preserve heading hierarchy and regular paragraph text.
@@ -142,13 +151,15 @@ def extract_word_to_markdown(file_path: Path) -> str:
 
 def extract_excel_to_markdown(file_path: Path) -> str:
     """Convert each worksheet in an Excel workbook into a Markdown table."""
-    workbook = pd.ExcelFile(file_path)
+    # Excel detects ZIP-based workbooks by content, even with a .xls suffix.
+    parser_limits.check_office_archive(file_path, required=False)
     parts = []
-    for sheet_name in workbook.sheet_names:
-        # Read values as strings and render missing cells as blanks.
-        dataframe = pd.read_excel(workbook, sheet_name=sheet_name, dtype=str).fillna("")
-        parts.append(f"## Sheet: {sheet_name}")
-        parts.append("_Empty worksheet_" if dataframe.empty else dataframe.to_markdown(index=False))
+    with pd.ExcelFile(file_path) as workbook:
+        for sheet_name in workbook.sheet_names:
+            # Read values as strings and render missing cells as blanks.
+            dataframe = pd.read_excel(workbook, sheet_name=sheet_name, dtype=str).fillna("")
+            parts.append(f"## Sheet: {sheet_name}")
+            parts.append("_Empty worksheet_" if dataframe.empty else dataframe.to_markdown(index=False))
     return "\n\n".join(parts).strip()
 
 
