@@ -123,6 +123,43 @@ test('confirming and saving clears the new-configuration progress without deleti
   const separate=await page(saved,'ap');assert.match(separate.editor.innerHTML,/Separate AP draft/);
 });
 
+for(const mode of ['ap','ar'])test(`${mode}: profile edits after activation survive refresh and require another test`,async()=>{
+  const party=mode==='ap'?'supplier':'customer';
+  const cases=[
+    ['input','setup-name','Updated PO setup',profile=>profile.name],
+    ['input','setup-description','Use the buyer reference',profile=>profile.description],
+    ['input','setup-currency','usd',profile=>profile.encoding_rules.default_currency,'USD'],
+    ['change','setup-party','42',profile=>profile[party],42],
+    ['change','setup-date','DD/MM/YYYY',profile=>profile.encoding_rules.date_format],
+    ['change','setup-lookup',party+'_name',profile=>profile.relation_lookups[party].match_field],
+  ];
+  for(const [event,id,value,read,expected=value] of cases){
+    const saved=storage(),app=await page(saved,mode);
+    app.input('da-source-text','PO: PO-001');await app.click('lock-text');
+    app.editor.handlers.select({target:{id:'da-annotation-text',selectionStart:4,selectionEnd:10}});
+    await app.click('annotate');await app.click('create-prompt');await app.click('test');await tick();
+    const pendingReview=app.click('review');await tick();app.confirm.checked=true;
+    await app.reviewForm.handlers.submit({preventDefault(){}});await pendingReview;
+    assert.match(app.editor.innerHTML,/Configuration saved and activated/);
+    const record=structuredClone({...app.calls.find(call=>call.action==='setup-save').body.configuration,id:9,revision:2,status:'submitted'});
+    const serverSnapshot=JSON.stringify(record);
+    app.root.handlers[event]({target:{id,value,dataset:{}}});
+    const cached=[...saved.values.values()].map(raw=>JSON.parse(raw)).find(item=>item.profile.id===9);
+    assert.ok(cached,`${id}: edits to the activated configuration must be cached`);
+    assert.equal(read(cached.profile),expected,id);
+    assert.equal(cached.hasUnsaved,true,id);
+    assert.equal(cached.receipt,null,`${id}: profile edits invalidate the test receipt`);
+    const restored=await page(saved,mode,record);
+    assert.equal(restored.nodes.get('setup-saved-status').textContent,'Unsaved changes',id);
+    assert.match(restored.editor.innerHTML,/data-step='3'[^>]*aria-current='step'/,id);
+    assert.match(restored.editor.innerHTML,/data-da='review' disabled/,id);
+    assert.doesNotMatch(restored.editor.innerHTML,/Configuration saved and activated/,id);
+    const roundTrip=[...saved.values.values()].map(raw=>JSON.parse(raw)).find(item=>item.profile.id===9);
+    assert.equal(read(roundTrip.profile),expected,`${id}: refresh retains the edited value`);
+    assert.equal(JSON.stringify(record),serverSnapshot,`${id}: autosave must not change the server record`);
+  }
+});
+
 function draftStore(saved,time){
   const window={};vm.runInNewContext(fs.readFileSync(path.join(directory,'document-progress.js'),'utf8'),{window});
   return window.DocumentSetupProgress.create(saved,()=>time.value);
