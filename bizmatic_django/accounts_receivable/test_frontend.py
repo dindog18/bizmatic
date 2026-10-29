@@ -18,6 +18,9 @@ class AccountingFrontendTests(TestCase):
                     self.assertContains(response, 'id="finance-config"')
                     if name == 'configuration_create':
                         self.assertContains(response, 'accounting/setup/workspace.js')
+                        self.assertContains(response, 'accounting/setup/document-progress.js')
+                        self.assertLess(response.content.index(b'accounting/setup/document-progress.js'),
+                                        response.content.index(b'accounting/setup/workspace.js'))
                         self.assertNotContains(response, 'accounting/configuration.js')
             self.assertEqual(self.client.get(reverse(f'{namespace}:invoice_detail', args=[999])).status_code, 404)
 

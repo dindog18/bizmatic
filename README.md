@@ -74,6 +74,57 @@ The application loads **`bizmatic_django/.env`** automatically, regardless of th
 
 Source PostgreSQL credentials are entered in **Database connections**, separately from the application database settings. Saved passwords are encrypted with a key stored by default at `~/.config/bizmatic/db-extraction.key`. Keep that key outside Git, make it available to all application workers, and back it up separately from the application database. See the [database extraction guide](bizmatic_django/db_extraction/README.md) for permissions, encryption, and schema discovery.
 
+## PDF previews behind Nginx
+
+PDF previews load the bundled PDF.js JavaScript modules from
+`/static/document_extraction/vendors/pdfjs/`. Both `pdf.min.mjs` and
+`pdf.worker.min.mjs` must be served with a JavaScript MIME type. A response with
+`Content-Type: application/octet-stream` causes the browser to reject the module,
+even when the original PDF downloads successfully. The page then shows
+“Preview unavailable” with a “Failed to fetch dynamically imported module” detail.
+
+On Ubuntu, edit the existing JavaScript entry in `/etc/nginx/mime.types` to
+include `mjs`, preserving its other extensions:
+
+```nginx
+application/javascript  js mjs;
+```
+
+Ensure the Nginx configuration serving `/static/` uses that MIME table, normally
+through `include /etc/nginx/mime.types;` in the `http` block. If the static-file
+location defines its own `types` block, update its JavaScript entry as well;
+that block overrides the inherited table. See the [Nginx types documentation](https://nginx.org/en/docs/http/ngx_http_core_module.html#types).
+
+Validate the configuration before reloading:
+
+```sh
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Check the response headers for **both** module URLs on the deployed host. They
+should return HTTP 200 with `application/javascript` (or `text/javascript`). Then
+hard-refresh the document page to discard cached responses with the old MIME
+type. This change does not require a database migration or a Django restart.
+
+## Document extraction limits
+
+PDF and Office extraction reject files larger than 25 MiB. PDF table discovery
+allows at most 100 pages, 512 estimated edges per page and 4,096 per document.
+The estimate counts individual drawing items and inferred path bounds, including
+rectangles and closed paths. Documents beyond these limits fail with a message
+to split or simplify the file; text is not silently dropped.
+
+DOCX and ZIP-based Excel packages allow at most 2,048 entries, 16 MiB per
+expanded entry and 64 MiB of expanded content in total. Only stored and DEFLATE
+members are accepted. Raw compressed streams are checked with bounded output,
+actual size, checksum and stream-end validation before opening the Office
+parser. This also applies to ZIP-based workbooks named `.xls`.
+
+These checks bound Office package expansion and PDF table-discovery complexity.
+They do not isolate native PDF decompression, XML parsing, legacy XLS parsing,
+or browser previews. Keep hosting access restrictions and worker resource limits
+appropriate for untrusted documents. No database migration is required.
+
 ## Database extraction workflow
 
 1. Add and test a PostgreSQL connection, then refresh its schema.
