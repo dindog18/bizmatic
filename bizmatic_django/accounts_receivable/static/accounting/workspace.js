@@ -221,7 +221,15 @@
     if(resource==='payments' && record.status!=='reversed') actions+=button(url(resource,record.id,'allocate'),'Allocate payment',true,'link');
     if(resource==='reconciliation') actions+=button(url(resource,record.id,'match'),'Match line items',true,'check-double');
     if(resource==='invoices') actions+=button(url('payments')+'?party='+record.partyId,'View payments',true,'credit-card');
+    if(extractionOnly) actions+='<button type="button" class="btn btn-outline-danger" id="delete-record">'+icon('trash')+'Delete record</button>';
     root.innerHTML=breadcrumb(record.reference)+heading(resource==='parties'?record.name:record.reference,`${label(singulars[resource])} ${resource==='parties'?'· '+esc(record.reference):'· '+a(url('parties',record.partyId),esc(partyName(record)))}`,actions);
+    if(extractionOnly) root.querySelector('#delete-record').addEventListener('click', async () => {
+      if(!window.confirm(`Delete ${singulars[resource]} ${record.reference}? Its line items will also be deleted. Source files and extraction history are retained. This cannot be undone.`)) return;
+      try {
+        await api.post('record-delete', record.id, {resource, revision:record.revision, confirmed:true});
+        location.href=url(resource);
+      } catch(error) { showError(error.message); }
+    });
     if(extractionOnly) root.insertAdjacentHTML('beforeend',extractionNotice());
     if(resource==='parties') return partyDetail(record);
     if(resource==='reconciliation') return caseDetail(record);
