@@ -122,7 +122,8 @@ class RecordSetupTests(TestCase):
                 original_count = model(mode, 'LLMExtractionLog').objects.count()
                 self.provider.reset_mock()
                 raw = [{'base.id': 1, 'base.'+party+'_code': 'CODE-001', 'base.'+party+'_name': 'Example Trading'}]
-                with patch('accounts_receivable.services.setup.database.fetch', return_value=(raw, [])):
+                with patch('accounts_receivable.services.setup.database.psycopg.connect') as connect:
+                    connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value.__iter__.return_value = raw
                     result = self.post(mode, 'setup-test', {'configuration': values, 'limit': 5})
                     self.assertEqual(result.status_code, 200, result.content)
                     self.assertTrue(result.json()['passed'], result.content)
@@ -144,7 +145,7 @@ class RecordSetupTests(TestCase):
                 log = model(mode, 'LLMExtractionLog').objects.get(pk=response.json()['llm_log_no'])
                 self.assertEqual(log.status, 'failed')
                 self.assertEqual((log.input_tokens, log.output_tokens), (61, 37))
-                self.assertIn('truncated', log.error_message)
+                self.assertIn('output limit', log.error_message)
                 self.assertEqual(log.response_payload, self.provider.return_value)
                 record, _ = self.query(mode)
                 self.respond({'message': 'Unsupported update.', 'updates': {'sql': 'SELECT * FROM anything'}})
@@ -356,7 +357,8 @@ class RecordSetupTests(TestCase):
     def test_query_test_and_runtime_import_share_the_same_mapping_plan(self):
         record, query = self.query()
         raw = [{'base.id': 1, 'base.supplier_code': 'S1', 'base.supplier_name': 'One'}]
-        with patch('accounts_receivable.services.setup.database.fetch', return_value=(raw, [])):
+        with patch('accounts_receivable.services.setup.database.psycopg.connect') as connect:
+            connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value.__iter__.return_value = raw
             result = database.test('ap', record, 5)
             self.assertTrue(result['passed'], result)
             header, lines = database.import_rows('ap', record, 5, 0)[0]
@@ -388,7 +390,8 @@ class RecordSetupTests(TestCase):
         record, query = self.query()
         saved = configuration.save('ap', configuration.snapshot(record), submit=True)
         raw = [{'base.id': 1, 'base.supplier_code': 'S1', 'base.supplier_name': 'One'}]
-        with patch('accounts_receivable.services.setup.database.fetch', return_value=(raw, [])):
+        with patch('accounts_receivable.services.setup.database.psycopg.connect') as connect:
+            connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value.__iter__.return_value = raw
             request = {'request_id': str(uuid4()), 'revision': saved.revision, 'limit': 5, 'offset': 0}
             run = imports.execute('ap', saved.pk, request)
             self.assertEqual(run.status, 'completed', run.result)

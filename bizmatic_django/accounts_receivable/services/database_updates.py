@@ -115,10 +115,11 @@ def candidate(mode, config, key, parsed, locked=False):
                 detail = '; '.join(f'{name}: {"; ".join(messages)}' for name, messages in error.message_dict.items()) if hasattr(error, 'message_dict') else error_text(error)
                 raise ValidationError(f'Line {number}: {detail}') from error
             lines.append(line)
-        validate_totals(config.target_entity, header, lines, header_values=parsed['record'], line_values=raw_lines)
         if not raw_lines:
             lines = previous_lines  # An omitted item collection does not erase saved evidence.
             numbers = set(previous)
+        validate_totals(config.target_entity, header, lines, header_values=parsed['record'],
+                        line_values=raw_lines if raw_lines else None)
     changes = existing is None or any(getattr(existing, name) != getattr(header, name) for name in values)
     if has_lines:
         changes = changes or set(previous) != numbers

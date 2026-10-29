@@ -86,8 +86,20 @@ def extract_pdf_to_markdown(file_path: Path) -> str:
                 elements.append((y, words[0][0], ' '.join(w[4] for w in words)))
             content = '\n\n'.join(value for _, _, value in sorted(elements) if value.strip())
             if not content.strip():
+                # A genuinely blank rendered page can be skipped; a page with
+                # visible image or drawing content still needs OCR.
+                scale = min(1.0, 1024 / max(page.rect.width, page.rect.height, 1))
+                pixels = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False).samples
+                visible_drawing = any(
+                    drawing.get(name) is not None and any(channel < 1 for channel in drawing[name])
+                    for drawing in page.get_drawings() for name in ('color', 'fill')
+                )
+                if not page.get_image_info() and not visible_drawing and pixels.count(255) == len(pixels):
+                    continue
                 raise ValueError(f'Page {page_number} has no extractable text. Use OCR for scanned PDFs.')
             parts.append(f'## Page {page_number}\n\n{content}')
+    if not parts:
+        raise ValueError('This PDF has no extractable text. Use OCR for scanned PDFs.')
     return '\n\n'.join(parts).strip()
 
 

@@ -430,7 +430,8 @@ class ConfigurationChatTests(TestCase):
                         self.assertEqual(result['catalog'][0]['lineFields'], [])
                         self.assertNotIn('line_item_context', result['parameters'])
                     else:
-                        self.assertIn('line_source_table' if source == 'database' else 'line_item_context', result['parameters'])
+                        self.assertTrue(result['catalog'][0]['lineFields'])
+                        self.assertNotIn('line_source_table' if source == 'database' else 'line_item_context', result['parameters'])
         self.provider.assert_not_called()
 
     def test_selected_chat_receives_only_its_catalog_and_source_fields(self):

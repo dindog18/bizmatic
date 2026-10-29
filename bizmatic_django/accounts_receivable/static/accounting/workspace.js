@@ -50,7 +50,11 @@
   const balance = invoice => invoice.balance;
   const invoiceStatus = invoice => settled(invoice) >= invoice.amount && invoice.amount > 0 ? 'paid' : settled(invoice) > 0 ? 'partially_paid' : 'unpaid';
   const posted = invoice => !['draft','pending','void'].includes(invoice.invoiceStatus);
-  const overdueDays = invoice => Math.max(0, Math.round((today - new Date(`${invoice.dueDate}T00:00:00`)) / 86400000));
+  const overdueDays = invoice => {
+    if (!invoice.dueDate) return null;
+    const days = Math.round((today - new Date(`${invoice.dueDate}T00:00:00`)) / 86400000);
+    return Number.isFinite(days) ? Math.max(0, days) : null;
+  };
   const outstanding = () => data.invoices.filter(invoice => invoice.currency===reportCurrency && posted(invoice) && balance(invoice) > 0);
   const available = (payment, component = 'cash') => Math.max(0, (component === 'cash' ? payment.amount : component === 'withholding' ? payment.withholding : payment.discountTaken) - data.allocations.filter(row => row.paymentId === payment.id).reduce((sum,row) => sum + row[component],0));
   const total = (rows, fn) => rows.reduce((sum, row) => sum + fn(row), 0);
@@ -73,9 +77,9 @@
   }
 
   function agingGroups() {
-    return ['Current','1–30 days','31–60 days','61–90 days','90+ days'].map((name, index) => {
-      const rows = outstanding().filter(invoice => { const days = overdueDays(invoice); return index === 0 ? days === 0 : index === 1 ? days > 0 && days <= 30 : index === 2 ? days > 30 && days <= 60 : index === 3 ? days > 60 && days <= 90 : days > 90; });
-      return {name, rows, amount: total(rows, balance), color: ['var(--biz-color-action-default)','var(--biz-color-info-fg)','var(--biz-color-warning-fg)','var(--biz-color-warning-fg)','var(--biz-color-error-fg)'][index]};
+    return ['Current','1–30 days','31–60 days','61–90 days','90+ days','Undated'].map((name, index) => {
+      const rows = outstanding().filter(invoice => { const days = overdueDays(invoice); return index === 5 ? days === null : days !== null && (index === 0 ? days === 0 : index === 1 ? days > 0 && days <= 30 : index === 2 ? days > 30 && days <= 60 : index === 3 ? days > 60 && days <= 90 : days > 90); });
+      return {name, rows, amount: total(rows, balance), color: ['var(--biz-color-action-default)','var(--biz-color-info-fg)','var(--biz-color-warning-fg)','var(--biz-color-warning-fg)','var(--biz-color-error-fg)','var(--biz-color-text-secondary)'][index]};
     });
   }
   function invoiceTable(rows, caption = 'Invoices') {
@@ -413,7 +417,7 @@
   function aging() {
     const groups=agingGroups();
     root.innerHTML=heading(ar?'Receivables aging':'Payables aging',`Outstanding balances by days past due. ${esc(reportCurrency)} · As of ${date(data.today)}.`,`<button class="btn btn-falcon-default" type="button" id="export-aging">${icon('download')} Export aging</button>`)+
-      `<div class="finance-kpis">${kpi('Outstanding balance',money(total(outstanding(),balance)),`${outstanding().length} open invoices`,'wallet',true)}${kpi('Current',money(groups[0].amount),'Not past due','calendar',true)}${kpi('Overdue',money(total(groups.slice(1),group=>group.amount)),'Past the invoice due date','clock',true)}${kpi('Over 60 days',money(groups[3].amount+groups[4].amount),'Aging beyond 60 days','exclamation-circle',true)}</div>`+
+      `<div class="finance-kpis">${kpi('Outstanding balance',money(total(outstanding(),balance)),`${outstanding().length} open invoices`,'wallet',true)}${kpi('Current',money(groups[0].amount),'Not past due','calendar',true)}${kpi('Overdue',money(total(groups.slice(1,5),group=>group.amount)),'Past the invoice due date','clock',true)}${kpi('Over 60 days',money(groups[3].amount+groups[4].amount),'Aging beyond 60 days','exclamation-circle',true)}</div>`+
       card('Aging by '+config.party.toLowerCase(),`<div class="table-responsive"><table class="table finance-table"><caption class="visually-hidden">Outstanding ${esc(reportCurrency)} by account and days overdue</caption><thead><tr><th>${config.party}</th>${groups.map(group=>`<th class="text-end">${group.name}</th>`).join('')}<th class="text-end">Total</th></tr></thead><tbody>${data.parties.map(account=>{const amounts=groups.map(group=>total(group.rows.filter(row=>row.partyId===account.id),balance));return `<tr><td>${a(url('parties',account.id),esc(account.name),'primary-link')}</td>${amounts.map(amount=>`<td class="amount">${amount?money(amount):'—'}</td>`).join('')}<td class="amount fw-semibold">${money(total(amounts,amount=>amount))}</td></tr>`;}).join('')}<tr class="fw-bold"><td>Total PHP</td>${groups.map(group=>`<td class="amount">${money(group.amount)}</td>`).join('')}<td class="amount">${money(total(outstanding(),balance))}</td></tr></tbody></table></div>`)+
       card('Overdue invoices',invoiceTable(outstanding().filter(row=>overdueDays(row)>0).sort((a,b)=>a.dueDate.localeCompare(b.dueDate))),a(url('invoices'),'View invoice register'))+
       '<div class="finance-callout">Aging includes posted and disputed invoices. Draft, pending, and void invoices are excluded. Cash, withholding tax, and discounts reduce balances only when the payment is cleared.</div>';
