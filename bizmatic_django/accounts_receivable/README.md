@@ -61,6 +61,13 @@ Use a source account with SELECT permission on the configured business tables.
 
 ## Accounting actions
 
+PO, delivery receipt, sales invoice, and payment detail pages offer Delete record
+in both AP and AR. Confirming deletion removes the record and its line items;
+source documents and extraction attempts are retained. Records linked to a
+reconciliation case, a line match, or a payment allocation cannot be deleted
+until those links are removed. Running extraction and stale confirmations are
+also rejected. Deletion uses a CSRF-protected POST and an atomic transaction.
+
 Account creation/editing, case membership, line matches and payment allocations
 use CSRF-protected POSTs and server validation. Stale edits are rejected. Existing
 matching and settlement rules remain in each app's `services/reconciliation.py`.

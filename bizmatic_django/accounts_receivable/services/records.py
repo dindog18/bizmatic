@@ -4,9 +4,44 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models.deletion import ProtectedError
 from django.shortcuts import get_object_or_404
 
-from .catalog import check_revision, model, party_key, revision
+from .catalog import check_revision, model, party_key, revision, RESOURCES
+
+
+@transaction.atomic
+def delete_document(mode, resource, record_id, data):
+    """Delete a standalone accounting record while preserving extraction history."""
+    if resource not in RESOURCES:
+        raise ValidationError('Choose a purchase order, invoice, delivery receipt, or payment.')
+    target = RESOURCES[resource]
+    Target = model(mode, target)
+    initial = get_object_or_404(Target, pk=record_id)
+    account_id = getattr(initial, party_key(mode)+'_id')
+    if account_id:
+        model(mode, party_key(mode)).objects.select_for_update().get(pk=account_id)
+    record = get_object_or_404(Target.objects.select_for_update(), pk=record_id)
+    if getattr(record, party_key(mode)+'_id') != account_id:
+        raise ValidationError('This record changed. Reload before deleting.', code='conflict')
+    check_revision(record, data.get('revision'), allocations(record) if target == 'payment' else None)
+    if data.get('confirmed') is not True:
+        raise ValidationError('Confirm the record deletion first.')
+    for relation in ('reconciliation_cases', 'payment_allocations', 'invoice_allocations'):
+        if hasattr(record, relation) and getattr(record, relation).exists():
+            raise ValidationError('This record is linked to reconciliation or payment allocations. Remove those links before deleting.')
+    logs = model(mode, 'LLMExtractionLog').objects.select_for_update().filter(**{target: record})
+    if any(log.status in {'queued', 'processing'} for log in logs):
+        raise ValidationError('Extraction is still running for this record. Wait before deleting.')
+    try:
+        # Nullable protected references preserve attempts and their original
+        # provider output when the resulting accounting record is removed.
+        logs.update(**{target: None})
+        if target != 'payment':
+            record.lines.all().delete()
+        record.delete()
+    except ProtectedError as error:
+        raise ValidationError('This record has linked accounting records. Remove those links before deleting.') from error
 
 
 def case_membership(case):

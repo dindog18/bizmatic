@@ -17,6 +17,9 @@ def perform(request, mode, action, record_id=None):
         data = json.loads(request.body)
         if not isinstance(data, dict):
             raise ValidationError("Expected a JSON object.")
+        if action == 'record-delete' and record_id:
+            records.delete_document(mode, data.get('resource'), record_id, data)
+            return JsonResponse({'deleted': True, 'id': record_id})
         if action == 'configuration-delete' and record_id:
             configuration.delete(mode, record_id, data)
             return JsonResponse({'deleted':True, 'id':record_id})
