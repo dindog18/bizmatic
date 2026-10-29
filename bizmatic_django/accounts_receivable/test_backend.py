@@ -208,6 +208,53 @@ class BackendTests(TestCase):
         self.assertIn("already created", failed.processing_error)
         self.assertEqual(model("ar", "sales_invoice").objects.count(), 1)
 
+    def test_deleted_records_allow_reextraction_but_live_records_still_block_duplicates(self):
+        for mode in ('ap', 'ar'):
+            self.account(mode)
+            key = party_key(mode)
+            for target, resource, output in [
+                ('sales_invoice', 'invoices', self.output(mode)),
+                ('purchase_order', 'purchase-orders', {'record': {key: 'C1', 'po_reference_no': 'PO-1',
+                    'order_date': '2026-10-22', 'currency': 'PHP', 'subtotal': '100', 'total_amount': '100'},
+                    'lines': [{'line_no': 1, 'quantity_ordered': '1', 'unit_price': '100', 'line_total': '100'}], 'issues': []}),
+                ('delivery_receipt', 'delivery-receipts', {'record': {key: 'C1', 'dr_reference_no': 'DR-1',
+                    'delivery_date': '2026-10-22'}, 'lines': [], 'issues': []}),
+                ('payment', 'payments', {'record': {key: 'C1', 'payment_reference_no': 'PAY-1',
+                    'payment_date': '2026-10-22', 'currency': 'PHP',
+                    'amount_paid' if mode == 'ap' else 'amount_received': '100'}, 'lines': [], 'issues': []}),
+            ]:
+                with self.subTest(mode=mode, target=target):
+                    self.config(mode, target)
+                    route = self.route(mode)
+                    destination, _ = RoutingDestination.objects.get_or_create(
+                        module_name=model(mode, target)._meta.app_label, target_model=model(mode, target).__name__,
+                        defaults={'name': mode+target})
+                    route.destination = destination
+                    route.save()
+                    self.respond(output)
+                    done = process(route.pk)
+                    self.assertEqual(done.processing_status, 'completed', done.processing_error)
+                    original = model(mode, target).objects.get()
+                    old_log = model(mode, 'LLMExtractionLog').objects.get(routing_route=route)
+                    payload = {'revision': pages.document(original, target, mode)['revision'], 'confirmed': True}
+                    records.delete_document(mode, resource, original.pk, payload)
+                    old_log.refresh_from_db()
+                    self.assertEqual(old_log.status, 'completed')
+                    self.assertIsNone(getattr(old_log, target+'_id'))
+                    another = self.route(mode, document=route.routing_log.source_document)
+                    another.destination = destination
+                    another.save()
+                    recreated = process(another.pk)
+                    self.assertEqual(recreated.processing_status, 'completed', recreated.processing_error)
+                    self.assertEqual(model(mode, target).objects.count(), 1)
+                    duplicate = self.route(mode, document=route.routing_log.source_document)
+                    duplicate.destination = destination
+                    duplicate.save()
+                    blocked = process(duplicate.pk)
+                    self.assertEqual(blocked.processing_status, 'failed')
+                    self.assertIn('already created', blocked.processing_error)
+                    self.assertEqual(model(mode, target).objects.count(), 1)
+
     def test_invalid_lines_roll_back_header_but_keep_attempt(self):
         self.account();self.config();route = self.route()
         output = self.output();output["lines"].append({**output["lines"][0], "quantity_invoiced": "-2"})

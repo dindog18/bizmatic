@@ -178,8 +178,11 @@ def save_result(mode, config, parsed, log=None, route=None, database_source=None
         allowed_reviews = {"pending", "approved"} if automatic else {"approved"}
         if current_route.review_status not in allowed_reviews or current_route.processing_status != "processing":
             raise ValidationError("The route is no longer approved for processing.")
-        # A new routing attempt must not silently encode the same source again.
-        if model(mode, "LLMExtractionLog").objects.filter(fk_document_no=source, target_entity=target, status="completed", purpose="extraction").exclude(pk=log.pk).exists():
+        # Deletion retains completed attempt history but detaches its record.
+        # Only attempts whose accounting record still exists block a rerun.
+        if model(mode, "LLMExtractionLog").objects.filter(
+                fk_document_no=source, target_entity=target, status="completed", purpose="extraction",
+                **{target + '__isnull': False}).exclude(pk=log.pk).exists():
             raise ValidationError("This source already created a record of this type. Review its accounting history.")
         if target not in {"customer", "supplier"}:
             values.update(source_document=source, source_text_log=route.routing_log.source_text_log,
