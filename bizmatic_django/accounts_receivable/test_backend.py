@@ -313,8 +313,9 @@ class BackendTests(TestCase):
 
     def test_all_pages_render_from_saved_data_and_have_no_fixtures(self):
         for mode,base in [('ar','accounts-receivable'),('ap','accounts-payable')]:
-            self.account(mode);self.config(mode);route=self.route(mode);self.respond(self.output(mode));process(route.pk)
-            for path in ['', 'configuration/', 'configuration/1/', 'llm-logs/', 'invoices/', 'invoices/1/', 'aging/']:
+            self.account(mode);config=self.config(mode);route=self.route(mode);self.respond(self.output(mode));process(route.pk)
+            invoice=model(mode,'sales_invoice').objects.get()
+            for path in ['', 'configuration/', f'configuration/{config.pk}/', 'llm-logs/', 'invoices/', f'invoices/{invoice.pk}/', 'aging/']:
                 response=self.client.get(f'/{base}/{path}')
                 self.assertEqual(response.status_code,200,path)
                 self.assertNotContains(response,'accounting/demo-data.js')
@@ -386,7 +387,8 @@ class BackendTests(TestCase):
         self.assertEqual(response.status_code,200,response.content)
         result=response.json()['record']
         self.assertEqual(result['processing_status'],'completed')
-        self.assertEqual(result['record_url'],'/accounts-receivable/invoices/1/')
+        invoice=model('ar','sales_invoice').objects.get()
+        self.assertEqual(result['record_url'],f'/accounts-receivable/invoices/{invoice.pk}/')
         self.assertIn('/llm-logs/',result['history_url'])
 
     def route_request(self, modes=("ap", "ar")):

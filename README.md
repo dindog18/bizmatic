@@ -21,6 +21,23 @@ See the [query builder guide](bizmatic_django/accounts_receivable/QUERY_BUILDER.
 - PostgreSQL 14 or newer for external database extraction. Source connection profiles are configured in the application.
 - An optional LLM provider and suitable model for provider-dependent extraction, routing, or setup assistance. Local browsing and database query preparation do not require an LLM.
 
+## Docker on Ubuntu
+
+Use the [Docker deployment guide](deploy/README.md) for a complete Django/Gunicorn,
+PostgreSQL and Nginx stack, persistent uploads and credential keys, automatic
+migrations, PDF preview MIME types, and aligned request timeouts. From the
+repository root, generate a private configuration and start the stack:
+
+```sh
+python3 deploy/configure.py --host YOUR_SERVER_IP --port 8005
+# Review .env.docker, including the listener address and LLM settings.
+./deploy/compose up -d --build --wait --wait-timeout 180
+```
+
+The listener defaults to loopback. The guide explains enabling trusted LAN access,
+connecting host/container Ollama, migrating an existing installation, backups,
+and restoring the original credential key. Existing data is not imported automatically.
+
 ## Getting started
 
 Run these commands from the repository root on macOS or Linux:

@@ -111,12 +111,15 @@ class ReadOnlyPagesTests(TestCase):
             path = f'/documents/{self.document.pk}/original/'
             response = self.client.get(path, {'path': '/etc/passwd'})
             self.assertEqual(b''.join(response.streaming_content), b'Original stored content')
-            response.close()
+            # Consuming the test client streaming iterator closes the response
+            # with connection-cleanup signals suspended for TestCase transactions.
             self.assertEqual(response['Content-Type'], 'text/plain')
             download = self.client.get(path, {'download': '1'})
             self.assertIn('attachment', download['Content-Disposition'])
-            download.close()
-            self.assertEqual(self.client.head(path).status_code, 200)
+            self.assertEqual(b''.join(download.streaming_content), b'Original stored content')
+            head = self.client.head(path)
+            self.assertEqual(head.status_code, 200)
+            self.assertEqual(b''.join(head.streaming_content), b'')
             self.assertEqual(self.client.post(path).status_code, 405)
             stored.unlink()
             self.assertEqual(self.client.get(path).status_code, 404)

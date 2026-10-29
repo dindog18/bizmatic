@@ -1,0 +1,104 @@
+name: bizmatic
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: ${DB_NAME:-bizmatic}
+      POSTGRES_USER: ${DB_USER:-bizmatic}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Generate .env.docker first; see deploy/README.md}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    logging: *logging
+
+  app:
+    build: .
+    image: ${BIZMATIC_APP_IMAGE:-bizmatic-app:local}
+    env_file:
+      - path: ${BIZMATIC_ENV_FILE:-.env.docker}
+        format: raw
+    environment:
+      DB_ENGINE: django.db.backends.postgresql
+      DB_HOST: db
+      DB_PORT: "5432"
+      LOCAL_FILE_STORAGE_PATH: /var/lib/bizmatic/uploads
+      DB_EXTRACTION_CREDENTIAL_KEY_FILE: /var/lib/bizmatic/keys/db-extraction.key
+      DJANGO_TRUST_PROXY: "true"
+      REQUEST_TIMEOUT_SECONDS: ${REQUEST_TIMEOUT_SECONDS:-600}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - uploads:/var/lib/bizmatic/uploads
+      - credential_key:/var/lib/bizmatic/keys
+      - static:/app/staticfiles
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, /app/deploy/healthcheck.py]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 120s
+    mem_limit: ${APP_MEMORY_LIMIT:-2g}
+    cpus: ${APP_CPUS:-2.0}
+    pids_limit: 256
+    stop_grace_period: 660s
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+  proxy:
+    build:
+      context: ./deploy/nginx
+    image: ${BIZMATIC_PROXY_IMAGE:-bizmatic-proxy:local}
+    environment:
+      REQUEST_TIMEOUT_SECONDS: ${REQUEST_TIMEOUT_SECONDS:-600}
+      PUBLIC_SCHEME: ${PUBLIC_SCHEME:-http}
+      CLIENT_MAX_BODY_SIZE: ${CLIENT_MAX_BODY_SIZE:-128m}
+    ports:
+      - "${BIZMATIC_BIND_ADDRESS:-127.0.0.1}:${BIZMATIC_PORT:-8005}:8080"
+    volumes:
+      - static:/srv/static:ro
+    depends_on:
+      app:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/healthz/]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:0.40.6}
+    profiles: [ollama]
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  database:
+  uploads:
+  credential_key:
+  static:
+  ollama_models:

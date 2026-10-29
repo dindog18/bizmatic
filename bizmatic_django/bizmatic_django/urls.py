@@ -16,10 +16,12 @@ Including another Urlconf
 """
 
 from .onboarding import setup
+from .health import health
 from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
+    path("healthz/", health, name="health"),
     path("configuration-lab/", include("accounts_receivable.prototype_urls")),
     path("setup/", setup, name="setup"),
     path("admin/", admin.site.urls),

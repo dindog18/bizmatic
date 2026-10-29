@@ -184,12 +184,24 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = Path(os.getenv("DJANGO_STATIC_ROOT", str(BASE_DIR / "staticfiles")))
+LOCAL_FILE_STORAGE_PATH = os.getenv("LOCAL_FILE_STORAGE_PATH", str(BASE_DIR / "storage_file"))
 
 # Keep the encryption key outside the repository and application database.
 # Provision it once as the service account using init_db_credential_key.
 # noinspection SpellCheckingInspection
-DB_EXTRACTION_CREDENTIAL_KEY_FILE = Path.home() / ".config" / "bizmatic" / "db-extraction.key"
+DB_EXTRACTION_CREDENTIAL_KEY_FILE = Path(os.getenv(
+    "DB_EXTRACTION_CREDENTIAL_KEY_FILE",
+    str(Path.home() / ".config" / "bizmatic" / "db-extraction.key"),
+))
+
+CSRF_TRUSTED_ORIGINS = [value.strip() for value in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if value.strip()]
+# Enable only behind a proxy that overwrites this header. Compose keeps the
+# Gunicorn port private and its Nginx proxy supplies the configured public scheme.
+if os.getenv("DJANGO_TRUST_PROXY", "false").lower() in {"1", "true", "yes", "on"}:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SESSION_COOKIE_SECURE = os.getenv("DJANGO_SECURE_COOKIES", "false").lower() in {"1", "true", "yes", "on"}
+CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 
 
 # Email
