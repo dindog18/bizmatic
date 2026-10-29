@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+from decimal import Decimal
 from pathlib import Path
 
 from .environment import load_project_env
@@ -21,6 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load .env before reading database, Django, or other environment settings.
 # Explicit process variables still take precedence (for CI and deployment).
 load_project_env()
+RECONCILIATION_PRICE_TOLERANCE = Decimal(os.getenv("RECONCILIATION_PRICE_TOLERANCE", "0.01"))
 
 # Extraction progress and tracebacks appear in the terminal running Django.
 LOGGING = {
@@ -37,6 +39,16 @@ LOGGING = {
         "document_extraction": {
             "handlers": ["extraction_console"],
             "level": os.getenv("DOC_EXTRACTION_LOG_LEVEL", "INFO").upper(),
+            "propagate": False,
+        },
+        "config_assistant": {
+            "handlers": ["extraction_console"],
+            "level": os.getenv("CONFIG_ASSISTANT_LOG_LEVEL", "INFO").upper(),
+            "propagate": False,
+        },
+        "router": {
+            "handlers": ["extraction_console"],
+            "level": os.getenv("ROUTER_LOG_LEVEL", "INFO").upper(),
             "propagate": False,
         },
     },
@@ -77,6 +89,9 @@ INSTALLED_APPS = [
     # Main Project Application
     "document_extraction",
     "db_extraction.apps.DbExtractionConfig",
+    "accounts_payable.apps.AccountsPayableConfig",
+    "accounts_receivable.apps.AccountsReceivableConfig",
+    "router.apps.RouterConfig",
 ]
 
 MIDDLEWARE = [
@@ -99,6 +114,7 @@ TEMPLATES = [
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.request",
+                "bizmatic_django.onboarding.workspace_guidance",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
             ],

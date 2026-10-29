@@ -1,0 +1,11 @@
+/* The dialog blocks page actions while its spotlight reveals the current target. */
+.help-tour[open] { position: fixed; inset: 0; margin: 0; padding: 0; border: 0; width: 100%; height: 100%; max-width: none; max-height: none; background: transparent; overflow: hidden; color: var(--falcon-body-color); }
+.help-tour::backdrop { background: transparent; }
+.help-tour-highlight { position: fixed; border: 3px solid #2c7be5; border-radius: .4rem; box-shadow: 0 0 0 9999px #0b1727a6; pointer-events: none; }
+.help-tour-card { position: fixed; width: min(350px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: visible; background: var(--falcon-body-bg, white); border: 1px solid var(--falcon-border-color); border-radius: .65rem; padding: 1rem; box-shadow: 0 .5rem 2rem #0b172740; }
+.help-tour-card::before { content: ''; position: absolute; left: var(--tour-arrow-x); top: -7px; width: 12px; height: 12px; background: var(--falcon-body-bg, white); transform: translateX(-6px) rotate(45deg); border-top: 1px solid var(--falcon-border-color); border-left: 1px solid var(--falcon-border-color); }
+.help-tour-card[data-placement='above']::before { top: auto; bottom: -7px; transform: translateX(-6px) rotate(225deg); }
+.help-tour-card[data-placement='inside']::before { display: none; }
+.help-tour-card button { min-height: var(--app-control-height, 40px); }
+.help-tour-card h2, .help-tour-card p { overflow-wrap: anywhere; }
+.help-tour-card p { max-height: max(2.5rem, calc(100dvh - 220px)); overflow-y: auto; }

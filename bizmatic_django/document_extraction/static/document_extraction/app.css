@@ -1,7 +1,11 @@
 /* Small application additions to the supplied Falcon 3.25.0 theme. */
+.document-routing-dialog { border:0; border-radius:.4rem; padding:0; width:min(94vw,40rem); color:var(--falcon-body-color); box-shadow:0 1rem 4rem #0003; }
+.document-routing-dialog::backdrop { background:#0b172766; }
+.document-routing-list { max-height:40vh; overflow:auto; font-size:.8125rem; }
 .content { min-height: 100vh; display: flex; flex-direction: column; padding-bottom: 0; }
 .footer { position: static; margin-top: auto; }
-section.card { padding: 0; }
+/* Reset Falcon's generic section spacing without overriding a card component's own padding. */
+section:where(.card) { padding: 0; }
 #page-content { flex: 1; padding-top: 1.5rem; }
 .navbar-top { flex-shrink: 0; }
 .brand-icon { width: 2.2rem; height: 2.2rem; border-radius: .45rem; background: var(--falcon-primary); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; }
@@ -34,7 +38,7 @@ section.card { padding: 0; }
 .extraction-markdown { font-size: .875rem; line-height: 1.8; overflow-x: auto; overflow-wrap: anywhere; }
 .extraction-markdown h1, .extraction-markdown h2 { font-size: 1.25rem; margin-bottom: 1rem; }
 .extraction-markdown h3, .extraction-markdown h4 { font-size: 1rem; }
-.extraction-markdown table { width: 100%; margin: 1rem 0; }
+.extraction-markdown table { width: 100%; margin: 1rem 0; overflow-wrap: normal; }
 .extraction-markdown th, .extraction-markdown td { padding: .6rem; border-bottom: 1px solid var(--falcon-border-color); }
 .extraction-markdown th { background: var(--falcon-gray-100); }
 .extraction-markdown > :last-child { margin-bottom: 0; }
@@ -62,4 +66,57 @@ details.card > summary { cursor: pointer; }
   .preview-empty { min-height: 280px; padding: 1rem; }
   .review-scroll, .markdown-editor { min-height: 380px; }
   .office-paper { padding: 1rem; }
+}
+
+/* Shared workspace rhythm: 8 / 12 / 16 / 24 / 32 px. Component styles reuse these tokens. */
+:root {
+  --app-space-2: .5rem;
+  --app-space-3: .75rem;
+  --app-space-4: 1rem;
+  --app-space-6: 1.5rem;
+  --app-space-8: 2rem;
+  --app-card-padding: 1.5rem;
+  --app-layout-gap: 1.5rem;
+  --app-control-height: 2.5rem;
+}
+#page-content { padding-bottom: var(--app-space-6); }
+#page-content .card {
+  --falcon-card-spacer-x: var(--app-card-padding);
+  --falcon-card-spacer-y: var(--app-card-padding);
+  --falcon-card-cap-padding-x: var(--app-card-padding);
+  --falcon-card-cap-padding-y: var(--app-space-4);
+}
+#page-content .card-header { gap: var(--app-space-3); flex-wrap: wrap; }
+#page-content .card-body > :last-child { margin-bottom: 0; }
+#page-content :is(.page-heading, .card-footer) { row-gap: var(--app-space-3); }
+#page-content .page-heading > div { min-width: 0; }
+#page-content h1 { overflow-wrap: anywhere; }
+#page-content .form-label { font-size: .8125rem; font-weight: 600; margin-bottom: var(--app-space-2); line-height: 1.5; }
+#page-content .form-text { font-size: .75rem; line-height: 1.6; margin-top: var(--app-space-2); }
+#page-content :is(.form-control, .form-select) { min-height: var(--app-control-height); font-size: .875rem; line-height: 1.5; min-width: 0; }
+#page-content .form-control { padding: .5rem .75rem; }
+#page-content textarea.form-control { padding: .75rem; }
+#page-content .btn { min-height: var(--app-control-height); padding: .5rem .875rem; line-height: 1.4; }
+#page-content .btn.btn-sm { min-height: 2.25rem; font-size: .8125rem; }
+#page-content .form-check { min-height: 2rem; padding-top: .25rem; padding-bottom: .25rem; }
+#page-content .form-check-label { line-height: 1.6; cursor: pointer; }
+#page-content .table > :not(caption) > * > :is(th, td) { line-height: 1.6; }
+#page-content .table > :not(caption) > * > :first-child { padding-left: var(--app-card-padding); }
+#page-content .table > :not(caption) > * > :last-child { padding-right: var(--app-card-padding); }
+#page-content .table .btn { white-space: nowrap; }
+.navbar-top .btn { min-height: 2.5rem; display: inline-flex; align-items: center; justify-content: center; }
+.navbar-top .navbar-toggler { min-width: 2.75rem; }
+.breadcrumb { row-gap: var(--app-space-2); line-height: 1.6; }
+@media (max-width: 767.98px) {
+  :root { --app-card-padding: 1rem; --app-layout-gap: 1rem; --app-control-height: 2.75rem; }
+  #page-content .btn.btn-sm, .navbar-top .btn { min-height: var(--app-control-height); }
+  #page-content .form-check { min-height: var(--app-control-height); }
+  #page-content .page-heading > .btn { align-self: flex-start; }
+  #page-content .card-footer { gap: var(--app-space-3); }
+  #page-content details:not(.card) > summary { min-height: 2.75rem; padding-top: .75rem; padding-bottom: .75rem; }
+  .navbar-vertical .nav-link { min-height: 2.75rem; }
+}
+@media (max-width: 375px) {
+  .navbar-top .mobile-brand { font-size: 1.125rem; }
+  .navbar-top .btn:not(.navbar-toggler) { padding-left: .5rem; padding-right: .5rem; }
 }

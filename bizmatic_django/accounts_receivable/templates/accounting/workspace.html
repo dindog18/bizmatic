@@ -1,0 +1,20 @@
+{% extends 'document_extraction/base.html' %}
+{% load static %}
+{% block extra_styles %}<link rel="stylesheet" href="{% static 'accounting/workspace.css' %}?v=order-amounts-1"><link rel="stylesheet" href="{% static 'accounting/configuration.css' %}?v=actions-spacing-2"><link rel="stylesheet" href="{% static 'accounting/llm-logs.css' %}?v=concept-c-1">{% endblock %}
+{% block workspace_title %}Finance &amp; reconciliation workspace{% endblock %}
+{% block content %}
+<div class="finance-workspace" data-mode="{{ finance_config.mode }}">
+  <div class="finance-workspace-top"><span class="finance-eyebrow">FINANCE WORKSPACE</span><span class="finance-demo-label"><span class="fas fa-database me-1" aria-hidden="true"></span> Saved accounting records</span></div>
+  <nav class="finance-nav" aria-label="{{ workspace_name }} navigation">
+    {% for item in finance_navigation %}<a href="{{ item.url }}" class="{% if item.key == finance_resource %}active{% endif %}" {% if item.key == finance_resource %}aria-current="page"{% endif %}><span class="fas fa-{{ item.icon }}" aria-hidden="true"></span>{{ item.label }}</a>{% endfor %}
+  </nav>
+  <div id="finance-root" aria-live="off"><div class="card p-4" role="status">Loading {{ workspace_name|lower }}…</div></div>
+  <noscript><div class="alert alert-warning">Enable JavaScript to explore the accounting workspace. The navigation above and extraction workspaces remain available.</div></noscript>
+  <div class="finance-preview-note"><span class="fas fa-info-circle" aria-hidden="true"></span><span>Records and reviewed configurations are saved in the application database.</span></div>
+</div>
+<div id="finance-toast" class="finance-toast" role="status" aria-live="polite" hidden></div>
+{{ finance_config|json_script:'finance-config' }}
+{{ finance_state|json_script:'finance-state' }}
+{% endblock %}
+{% block workspace_footer %}<span>Bizmatic · {{ workspace_name }}</span><span>Orders → Deliveries → Invoices → Payments</span>{% endblock %}
+{% block scripts %}{% if finance_resource == 'llm-logs' %}<script src="{% static 'document_extraction/vendors/marked.js' %}" defer></script>{% endif %}<script src="{% static 'accounting/api.js' %}?v=backend-1" defer></script><script src="{% static 'accounting/configuration-delete.js' %}?v=delete-2" defer></script><script src="{% static 'accounting/llm-logs.js' %}?v=backend-1" defer></script><script src="{% static 'accounting/workspace.js' %}?v=aging-undated-1" defer></script><script src="{% static 'accounting/configuration-schema.js' %}?v=optional-lines-1" defer></script><script src="{% static 'accounting/configuration.js' %}?v=optional-lines-1" defer></script>{% endblock %}

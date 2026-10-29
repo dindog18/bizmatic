@@ -95,6 +95,65 @@ class CredentialStorageTests(TestCase):
         with self.assertRaisesMessage(ValueError, "cannot be serialized"):
             serializers.serialize("json", [self.source])
 
+    @patch("db_extraction.forms.test_connection")
+    def test_changed_connection_cannot_reuse_saved_password(self, verify):
+        data = dict(name="Example", host="localhost", port=5432, database_name="metadata",
+                    username="metadata_reader", password="", ssl_mode="prefer", ssl_root_cert="",
+                    connect_timeout=10, enabled=True, included_schemas="")
+        changes = {"host": ["other-host", "localhost,other-host", "/tmp/other-postgres"],
+                   "port": [5433], "database_name": ["other", "postgresql://other-host/other"],
+                   "username": ["other_reader"], "ssl_mode": ["disable", "verify-full"],
+                   "ssl_root_cert": ["/tmp/other-ca.pem"]}
+        for field, values in changes.items():
+            for value in values:
+                with self.subTest(field=field, value=value):
+                    form = DatabaseSourceForm(data={**data, field: value},
+                                              instance=DatabaseSource.objects.get(pk=self.source.pk))
+                    self.assertFalse(form.is_valid())
+                    self.assertIn("password", form.errors)
+                    verify.assert_not_called()
+        self.source.refresh_from_db()
+        self.assertEqual((self.source.host, self.source.password), ("localhost", "test-password"))
+
+    @patch("db_extraction.forms.test_connection", return_value={"server_version": "17", "schema_count": 1})
+    def test_changed_connection_accepts_explicit_new_or_cleared_password(self, verify):
+        data = dict(name="Example", host="other-host", port=5432, database_name="metadata",
+                    username="metadata_reader", ssl_mode="prefer", connect_timeout=10,
+                    enabled=True, included_schemas="")
+        for password, clear, expected in [("replacement", False, "replacement"), ("", True, "")]:
+            with self.subTest(clear=clear):
+                form = DatabaseSourceForm(data={**data, "password": password, "clear_password": clear},
+                                          instance=DatabaseSource.objects.get(pk=self.source.pk))
+                self.assertTrue(form.is_valid(), form.errors.as_json())
+                self.assertEqual(verify.call_args.args[0].password, expected)
+                self.assertEqual(verify.call_args.args[0].host, "other-host")
+
+    @patch("db_extraction.forms.test_connection", return_value={"server_version": "17", "schema_count": 1})
+    def test_passwordless_profile_can_change_connection_without_reentering_password(self, verify):
+        self.source.password = ""
+        self.source.save()
+        form = DatabaseSourceForm(data=dict(name="Example", host="other-host", port=5432,
+            database_name="metadata", username="metadata_reader", password="", ssl_mode="prefer",
+            connect_timeout=10, enabled=True, included_schemas=""), instance=self.source)
+        self.assertTrue(form.is_valid(), form.errors.as_json())
+        self.assertEqual(verify.call_args.args[0].password, "")
+
+    @patch("db_extraction.forms.test_connection", return_value={"server_version": "17", "schema_count": 1})
+    def test_non_identity_edits_keep_password_but_removing_ca_requires_reentry(self, verify):
+        data = dict(name="Renamed", host="localhost", port=5432, database_name="metadata",
+                    username="metadata_reader", password="", ssl_mode="prefer", ssl_root_cert="",
+                    connect_timeout=20, enabled=False, included_schemas="public")
+        form = DatabaseSourceForm(data=data, instance=DatabaseSource.objects.get(pk=self.source.pk))
+        self.assertTrue(form.is_valid(), form.errors.as_json())
+        self.assertEqual(verify.call_args.args[0].password, "test-password")
+        verify.reset_mock()
+        self.source.ssl_root_cert = "/tmp/original-ca.pem"
+        self.source.save()
+        form = DatabaseSourceForm(data=data, instance=DatabaseSource.objects.get(pk=self.source.pk))
+        self.assertFalse(form.is_valid())
+        self.assertIn("password", form.errors)
+        verify.assert_not_called()
+
     def test_duplicate_constraint_names_are_scoped_to_each_table(self):
         run = ExtractionRun.objects.create(source=self.source, extractor_version="0.1.0")
         schema = DatabaseSchema.objects.create(run=run, name="public")
@@ -113,6 +172,14 @@ class LegacyCredentialMigrationTests(TransactionTestCase):
         before = [("db_extraction", "0001_initial")]
         after = [("db_extraction", "0002_extractionrun_extractor_version_and_more")]
         executor = MigrationExecutor(connection)
+        accounting_leaves = [
+            node for node in executor.loader.graph.leaf_nodes()
+            if node[0] in ("accounts_payable", "accounts_receivable")
+        ]
+        # These apps reference the database metadata tables. Remove their empty
+        # test schema before reconstructing the historical db_extraction state.
+        executor.migrate([("accounts_payable", None), ("accounts_receivable", None)])
+        self.addCleanup(lambda: MigrationExecutor(connection).migrate(accounting_leaves))
         # The security migration intentionally cannot be reversed into plaintext.
         # Remove only this test app's empty schema, then build its historical state.
         state = executor.loader.project_state(after)

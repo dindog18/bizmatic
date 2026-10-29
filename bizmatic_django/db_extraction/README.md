@@ -72,8 +72,11 @@ added, altered, or dropped objects without overwriting earlier snapshots.
 ## Credential storage
 
 Passwords use Fernet authenticated encryption and are masked in forms. Blank
-password edits preserve the existing password; Clear saved password explicitly
-removes it. The key is stored outside the repository and database at
+password edits preserve the existing password only while the host, port, database,
+username, SSL mode and CA certificate are unchanged. After changing those settings,
+enter the password again or choose **Clear saved password** before testing or saving.
+Profiles without a saved password can still use passwordless connections.
+The key is stored outside the repository and database at
 `~/.config/bizmatic/db-extraction.key`, permissions `0600`.
 `DB_EXTRACTION_CREDENTIAL_KEY_FILE` in Django settings can select a separately
 provisioned file. Every application worker must have access to the same key.

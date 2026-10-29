@@ -93,11 +93,11 @@ def get_file_mime_type(file_path: str) -> str:
     return mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
 
 
-async def _post(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+async def _post(url: str, payload: dict[str, Any], headers: dict[str, str], *, timeout: float | None = None) -> dict[str, Any]:
     # Non-streaming JSON only; API, network and decoding errors propagate.
     if payload.get("stream"):
         raise ValueError("Streaming is not supported by this JSON invoke API.")
-    async with httpx.AsyncClient(timeout=get_llm_timeout()) as client:
+    async with httpx.AsyncClient(timeout=get_llm_timeout() if timeout is None else timeout) as client:
         response = await client.post(url, json=payload, headers=headers)
         response.raise_for_status()
         result = JSON_OBJECT.validate_python(response.json(), strict=True)
@@ -106,7 +106,7 @@ async def _post(url: str, payload: dict[str, Any], headers: dict[str, str]) -> d
     return result
 
 
-async def _invoke(provider: str, payload: dict[str, Any]) -> dict[str, Any]:
+async def _invoke(provider: str, payload: dict[str, Any], *, config_prefix: str = "DOC_EXTRACTION", timeout: float | None = None) -> dict[str, Any]:
     # Credentials, model variable and API root for each provider.
     config: dict[str, tuple[str | None, str, str]] = {
         "openai": ("OPENAI_API_KEY", "OPENAI_MODEL", "https://api.openai.com/v1"),
@@ -119,12 +119,12 @@ async def _invoke(provider: str, payload: dict[str, Any]) -> dict[str, Any]:
     }
     key_name, model_name, base_url = config[provider]
     body: dict[str, Any] = JSON_OBJECT.validate_python(payload, strict=True)
-    model = TEXT.validate_python(body.get("model", _env(f"DOC_EXTRACTION_{model_name}")), strict=True)
+    model = TEXT.validate_python(body.get("model", _env(f"{config_prefix}_{model_name}")), strict=True)
     if not model:
-        raise ValueError(f"DOC_EXTRACTION_{model_name} is not configured.")
+        raise ValueError(f"{config_prefix}_{model_name} is not configured.")
     body["model"] = model
-    base_url = (_env(f"DOC_EXTRACTION_{provider.upper()}_BASE_URL") or base_url).rstrip("/")
-    api_key = _required(f"DOC_EXTRACTION_{key_name}") if key_name else ""
+    base_url = (_env(f"{config_prefix}_{provider.upper()}_BASE_URL") or _env(f"DOC_EXTRACTION_{provider.upper()}_BASE_URL") or base_url).rstrip("/")
+    api_key = (_env(f"{config_prefix}_{key_name}") or _required(f"DOC_EXTRACTION_{key_name}")) if key_name else ""
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     endpoint = "/chat/completions"
 
@@ -142,7 +142,9 @@ async def _invoke(provider: str, payload: dict[str, Any]) -> dict[str, Any]:
         endpoint = "/api/chat"
         body.setdefault("stream", False)
 
-    return await _post(base_url + endpoint, body, headers)
+    if timeout is None:
+        return await _post(base_url + endpoint, body, headers)
+    return await _post(base_url + endpoint, body, headers, timeout=timeout)
 
 
 # Generic invocations return the complete response, including usage metadata.
@@ -192,11 +194,17 @@ INVOKERS = {
 }
 
 
-async def invoke_with_llm(provider: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Route a provider-native request body; do not mutate the caller's payload."""
+async def invoke_with_llm(provider: str, payload: dict[str, Any], *, config_prefix: str = "DOC_EXTRACTION", timeout: float | None = None) -> dict[str, Any]:
+    """Invoke a native payload without mutating it.
+
+    Other apps can select their own environment prefix and timeout. Blank
+    credential and base-URL overrides reuse the extraction configuration.
+    """
     invoker = INVOKERS.get(provider.strip().lower())
     if invoker is None:
         raise ValueError(f"Unsupported LLM provider: {provider}")
+    if config_prefix != "DOC_EXTRACTION" or timeout is not None:
+        return await _invoke(provider.strip().lower(), payload, config_prefix=config_prefix, timeout=timeout)
     return await invoker(payload)
 
 

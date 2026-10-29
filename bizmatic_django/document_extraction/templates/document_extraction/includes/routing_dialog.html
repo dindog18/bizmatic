@@ -1,0 +1,5 @@
+<div id="document-routing" data-queue-url="{% url 'ROUTER:queue' %}" data-execute-url="{% url 'ROUTER:execute' %}" data-batch-id="{{ batch.batch_no|default:'' }}">
+  {% csrf_token %}
+  {{ routing_documents|json_script:"document-routing-data" }}
+  <dialog id="document-routing-dialog" class="document-routing-dialog" aria-labelledby="document-routing-title"></dialog>
+</div>

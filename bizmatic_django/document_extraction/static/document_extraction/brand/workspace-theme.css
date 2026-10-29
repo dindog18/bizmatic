@@ -1,0 +1,253 @@
+/* Concept C adapter for the existing Falcon / Bootstrap and Django components.
+ * Loaded last, scoped to the product shell; no admin or vendor stylesheet changes. */
+.biz-app {
+  --falcon-primary: var(--biz-color-action-default);
+  --falcon-primary-rgb: 54, 88, 212;
+  --falcon-body-bg: var(--biz-color-bg-page);
+  --falcon-body-color: var(--biz-color-text-primary);
+  --falcon-heading-color: var(--biz-color-text-primary);
+  --falcon-secondary-color: var(--biz-color-text-secondary);
+  --falcon-emphasis-color: var(--biz-color-text-primary);
+  --falcon-emphasis-bg: var(--biz-color-bg-surface);
+  --falcon-quaternary-bg: var(--biz-color-bg-surface);
+  --falcon-tertiary-bg: var(--biz-color-bg-subtle);
+  --falcon-border-color: var(--biz-color-border-subtle);
+  --falcon-gray-100: var(--biz-color-bg-subtle);
+  --falcon-gray-200: var(--biz-color-bg-subtle);
+  --falcon-gray-300: var(--biz-color-border-subtle);
+  --falcon-gray-600: var(--biz-color-text-secondary);
+  --falcon-gray-700: var(--biz-color-text-secondary);
+  --falcon-gray-900: var(--biz-color-text-primary);
+  --falcon-link-color: var(--biz-color-action-default);
+  --falcon-link-hover-color: var(--biz-color-action-hover);
+  --falcon-code-color: var(--biz-color-text-secondary);
+  --falcon-font-sans-serif: var(--biz-font-family);
+  --falcon-body-font-family: var(--biz-font-family);
+  --falcon-font-base: var(--biz-font-family);
+  --falcon-box-shadow: none;
+  --app-card-padding: 24px;
+  --app-layout-gap: 24px;
+  color: var(--biz-color-text-primary);
+  background: var(--biz-color-bg-page);
+  font: 400 14px/1.5 var(--biz-font-family);
+  -webkit-font-smoothing: antialiased;
+}
+.biz-app :is(h1,h2,h3,h4,h5,h6,.font-sans-serif) { font-family: var(--biz-font-family); color: var(--biz-color-text-primary); }
+.biz-app :is(.text-500,.text-600,.text-700,.text-muted,.text-secondary) { color: var(--biz-color-text-secondary)!important; }
+.biz-app :is(.text-800,.text-900,.text-1000) { color: var(--biz-color-text-primary)!important; }
+.biz-app .text-primary { color: var(--biz-color-action-default)!important; }
+.biz-app :is(.bg-100,.bg-200,.bg-body-tertiary,.bg-light) { background: var(--biz-color-bg-subtle)!important; }
+.biz-app :is(.bg-white,.bg-body) { background: var(--biz-color-bg-surface)!important; }
+.biz-app a { color: var(--biz-color-action-default); }
+.biz-app a:hover { color: var(--biz-color-action-hover); }
+.biz-app :is(a,button,input,select,textarea,summary,[tabindex]):focus-visible { outline: 2px solid var(--biz-color-focus); outline-offset: 3px; box-shadow: none; }
+.biz-app .skip-link { background: var(--biz-color-bg-surface); color: var(--biz-color-text-primary); }
+.biz-app .main > .container { max-width: none; width: 100%; padding: 0; }
+.biz-app .content { margin: 0; padding: 0; min-width: 0; }
+.biz-app #page-content { width: 100%; max-width: 1600px; margin: 0 auto; padding: 32px; }
+.biz-app .footer { padding: 0 32px; border-top: 1px solid var(--biz-color-border-subtle); }
+.biz-app .navbar-vertical.navbar-expand-xl {
+  position: fixed; inset: 0 auto 0 0; width: var(--biz-sidebar-width); padding: 0;
+  max-width: none;
+  border-right: 1px solid var(--biz-color-border-subtle); background: var(--biz-color-bg-surface); z-index: 1030;
+}
+.biz-app .navbar-vertical > .d-flex { height: 80px; padding: 0 24px; flex-shrink: 0; }
+.biz-app .navbar-brand { margin: 0; padding: 0; color: var(--biz-color-text-primary); }
+.biz-brand { display: inline-flex; align-items: center; gap: 8px; color: var(--biz-color-text-primary); font-size: 24px; font-weight: 700; letter-spacing: -.8px; }
+.biz-brand-symbol { display: block; object-fit: contain; flex-shrink: 0; }
+[data-bs-theme='dark'] .biz-brand-symbol { background: #fff; border-radius: 4px; }
+.biz-app .navbar-vertical .navbar-collapse { width: 100%; height: calc(100dvh - 80px)!important; margin: 0; background: var(--biz-color-bg-surface); }
+.biz-app .navbar-vertical .navbar-collapse.collapsing { transition: none; }
+.biz-app .navbar-vertical .navbar-vertical-content { width: 100%; height: 100%; padding: 0 12px 24px; display: flex; flex-direction: column; overflow-y: auto; }
+.biz-app .navbar-vertical-label { color: var(--biz-color-text-secondary); font-size: 10px; font-weight: 600; line-height: 16px; text-transform: uppercase; letter-spacing: .7px; padding-left: 12px!important; }
+.biz-app .navbar-vertical .navbar-nav { margin-bottom: 4px!important; gap: 4px; }
+.biz-app .navbar-vertical .navbar-nav .nav-item .nav-link { min-height: 44px; display: flex; align-items: center; padding: 12px; border-radius: 4px; color: var(--biz-color-text-primary); font-size: 13px; font-weight: 500; }
+.biz-app .navbar-vertical .nav-link:hover { background: var(--biz-color-bg-subtle); }
+.biz-app .navbar-vertical .navbar-nav .nav-item .nav-link.active { color: var(--biz-color-selection-text); background: var(--biz-color-selection-bg); font-weight: 600; }
+.biz-app .nav-link-icon { width: 20px; margin-right: 8px; font-size: 16px; color: var(--biz-color-text-secondary); }
+.biz-app .nav-link.active .nav-link-icon { color: inherit; }
+.biz-setup-count { margin-left: auto; background: var(--biz-color-warning-bg); color: var(--biz-color-warning-fg); border-radius: 4px; padding: 0 5px; font-size: 11px; }
+.biz-sidebar-footer { margin-top: auto; padding: 32px 12px 0; font-size: 12px; font-weight: 600; }
+.biz-sidebar-footer span { display: block; font-size: 11px; font-weight: 400; color: var(--biz-color-text-secondary); margin-top: 4px; }
+.biz-app .navbar-top { position: sticky; top: 0; width: 100%; min-height: 64px; padding: 8px 32px; margin: 0; background: var(--biz-color-bg-surface); border-bottom: 1px solid var(--biz-color-border-subtle); box-shadow: none; z-index: 1020; }
+.biz-app .navbar-glass { backdrop-filter: none; }
+.biz-header-title { font-size: 14px; font-weight: 600; }
+.biz-theme-toggle { width: 40px; min-width: 40px; }
+.biz-app .navbar-top .navbar-toggler { color: var(--biz-color-text-primary); padding: 8px; }
+.biz-app .navbar-toggle-icon .toggle-line,.biz-app .navbar-toggle-icon::before,.biz-app .navbar-toggle-icon::after { background: var(--biz-color-text-primary); }
+.biz-app #page-content h1 { font-size: 28px!important; line-height: 36px; font-weight: 600; letter-spacing: -.75px; }
+.biz-app :is(.finance-heading,.page-heading,.router-heading) p { color: var(--biz-color-text-secondary); font-size: 14px; line-height: 22px; }
+.biz-app :is(.card-header h2,.finance-card-head h2) { font-size: 16px!important; line-height: 24px; font-weight: 600; }
+.biz-app .card { --falcon-card-bg: var(--biz-color-bg-surface); background: var(--biz-color-bg-surface); color: var(--biz-color-text-primary); border: 1px solid var(--biz-color-border-subtle); border-radius: 8px; box-shadow: none; }
+.biz-app :is(.card-header,.card-footer) { background: transparent; border-color: var(--biz-color-border-subtle); }
+.biz-app .card-header { padding: 20px 24px; }
+.biz-app .table { --falcon-table-color: var(--biz-color-text-primary); --falcon-table-bg: transparent; --falcon-table-hover-bg: var(--biz-color-bg-subtle); --falcon-table-hover-color: var(--biz-color-text-primary); --falcon-table-border-color: var(--biz-color-border-subtle); color: var(--biz-color-text-primary); font-size: 13px; }
+.biz-app .table th { background: var(--biz-color-bg-subtle); color: var(--biz-color-text-secondary); font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.biz-app .table td { color: var(--biz-color-text-primary); border-color: var(--biz-color-border-subtle); }
+.biz-app .table-responsive { max-width: 100%; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.biz-app :is(.amount,.kpi-value,.finance-totals dd,.router-metric strong) { font-variant-numeric: tabular-nums lining-nums; }
+.biz-app :is(.form-control,.form-select) { color: var(--biz-color-text-primary); background-color: var(--biz-color-bg-surface); border-color: var(--biz-color-border-control); border-radius: 4px; }
+.biz-app .form-control::placeholder { color: var(--biz-color-text-secondary); opacity: 1; }
+.biz-app :is(.form-control,.form-select):focus { color: var(--biz-color-text-primary); background-color: var(--biz-color-bg-surface); border-color: var(--biz-color-focus); box-shadow: 0 0 0 1px var(--biz-color-focus); }
+.biz-app :is(.form-control,.form-select):disabled { background-color: var(--biz-color-disabled-bg); color: var(--biz-color-disabled-text); }
+.biz-app .form-check-input { border-color: var(--biz-color-border-control); background-color: var(--biz-color-bg-surface); width: 18px; height: 18px; }
+.biz-app .form-check-input:checked { background-color: var(--biz-color-brand-accent); border-color: var(--biz-color-brand-accent); }
+.biz-app .btn { border-radius: 4px; font-weight: 500; font-size: 13px; box-shadow: none; transition: background-color .12s, border-color .12s; }
+.biz-app :is(.btn-primary,.btn-falcon-primary) { --falcon-btn-color: var(--biz-color-action-text); --falcon-btn-bg: var(--biz-color-action-default); --falcon-btn-border-color: var(--biz-color-action-default); --falcon-btn-hover-color: var(--biz-color-action-text); --falcon-btn-hover-bg: var(--biz-color-action-hover); --falcon-btn-hover-border-color: var(--biz-color-action-hover); --falcon-btn-active-color: var(--biz-color-action-text); --falcon-btn-active-bg: var(--biz-color-action-active); --falcon-btn-active-border-color: var(--biz-color-action-active); color: var(--biz-color-action-text); background: var(--biz-color-action-default); border-color: var(--biz-color-action-default); }
+.biz-app :is(.btn-primary,.btn-falcon-primary):hover { color: var(--biz-color-action-text); background: var(--biz-color-action-hover); border-color: var(--biz-color-action-hover); }
+.biz-app :is(.btn-light,.btn-falcon-default,.btn-outline-primary,.btn-outline-secondary) { color: var(--biz-color-text-primary); background: var(--biz-color-bg-surface); border-color: var(--biz-color-border-control); box-shadow: none; }
+.biz-app :is(.btn-light,.btn-falcon-default,.btn-outline-primary,.btn-outline-secondary):hover { color: var(--biz-color-text-primary); background: var(--biz-color-bg-subtle); border-color: var(--biz-color-text-secondary); }
+.biz-app .btn-link { color: var(--biz-color-action-default); }
+.biz-app .btn:disabled,.biz-app .btn.disabled { color: var(--biz-color-disabled-text); background: var(--biz-color-disabled-bg); border-color: var(--biz-color-border-subtle); opacity: 1; cursor: not-allowed; }
+.biz-app :is(.badge,.finance-status) { font-size: 12px; font-weight: 500; border-radius: 4px!important; line-height: 18px; padding: 3px 8px; }
+.biz-app .badge-subtle-secondary { color: var(--biz-color-text-secondary); background: var(--biz-color-bg-subtle); }
+.biz-app .alert { border: 1px solid transparent; border-radius: 4px; font-size: 13px; line-height: 21px; }
+.biz-app .finance-workspace,.biz-app .finance-workspace[data-mode='ap'] { --finance-accent: var(--biz-color-action-default); --finance-soft: var(--biz-color-selection-bg); font-size: 14px; }
+.biz-app .finance-workspace-top { margin-bottom: 12px; }
+.biz-app .finance-eyebrow { font-size: 10px; letter-spacing: .8px; }
+.biz-app .finance-demo-label { color: var(--biz-color-text-secondary); background: none; padding: 0; font-weight: 400; font-size: 11px; }
+.biz-app .finance-nav { gap: 16px; margin-bottom: 24px; scrollbar-width: thin; }
+.biz-app .finance-nav a { padding: 12px 0; font-size: 12px; }
+.biz-app .finance-nav a .svg-inline--fa { display: none; }
+.biz-app .finance-kpis { gap: 16px; }
+.biz-app .finance-kpi { padding: 20px; border-top: 1px solid var(--biz-color-border-subtle); }
+.biz-app .finance-kpi .kpi-value { font-family: var(--biz-font-family); font-size: clamp(22px,2vw,30px); color: var(--biz-color-text-primary); letter-spacing: -.8px; line-height: 1.25; margin: 12px 0 8px; }
+.biz-app .finance-kpi .kpi-value small { font-family: inherit; font-size: 12px; }
+.biz-app .finance-kpi .kpi-label { font-size: 12px; }
+.biz-app .finance-kpi .kpi-note { font-size: 11px; }
+.biz-app .finance-table td { padding-top: 14px; padding-bottom: 14px; }
+.biz-app .finance-heading { flex-wrap: wrap; }
+.biz-app .finance-callout { padding: 12px 16px; font-size: 12px; border-left-color: var(--biz-color-border-control); }
+.biz-app .finance-callout summary { cursor: pointer; font-weight: 500; }
+.biz-app .finance-source-menu { position: relative; }
+.biz-app .finance-source-menu > summary { list-style: none; display: inline-flex; gap: 8px; align-items: center; }
+.biz-app .finance-source-menu > summary::-webkit-details-marker { display: none; }
+.biz-app .finance-source-options { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 12px; background: var(--biz-color-bg-surface); border: 1px solid var(--biz-color-border-subtle); border-radius: 8px; }
+.biz-app .finance-source-options .btn { justify-content: flex-start; }
+.biz-app .finance-breadcrumb { margin-bottom: 16px; }
+.biz-app .finance-preview-note { font-size: 11px; }
+.biz-app .finance-process a { border-radius: 8px; }
+.biz-app :is(.finance-dialog,.lab-dialog,.router-dialog,.document-routing-dialog) { color: var(--biz-color-text-primary); background: var(--biz-color-bg-surface); border: 1px solid var(--biz-color-border-subtle); border-radius: 12px; box-shadow: var(--biz-shadow-overlay); }
+.biz-app .finance-toast { color: var(--biz-color-success-fg); background: var(--biz-color-success-bg); border: 1px solid currentColor; border-radius: 8px; }
+.biz-app .finance-mobile-sort { display: none; }
+.biz-app .review-workspace { gap: 24px; }
+.biz-app .original-preview { background: var(--biz-color-bg-subtle); }
+.biz-app .upload-zone { border-color: var(--biz-color-border-control); background: var(--biz-color-bg-subtle); border-radius: 8px; }
+.biz-app .upload-zone:hover { border-color: var(--biz-color-action-default); }
+.biz-app .summary-icon { border-radius: 8px; }
+.biz-app .router-paper { color: #202124; background: #fff; }
+.biz-app .lab { color: var(--biz-color-text-primary); }
+.biz-app .lab :is(h1,h2,h3) { color: var(--biz-color-text-primary); }
+.biz-app .lab-scope { border-radius: 8px; }
+/* The source annotation canvas is a document surface; retain dark text over its
+ * category highlights in either UI theme. Annotation controls still follow theme tokens. */
+.biz-app .da-paper { background: #fff; }
+.biz-app .da-annotation-text { color: #202124; }
+[data-bs-theme='dark'] .biz-app :is(.da-field.active,.da-field-settings,.da-color-key) { background: var(--biz-color-bg-subtle); }
+.biz-app .help-tour-highlight { border-color: var(--biz-color-focus); }
+.biz-app .help-tour-card { background: var(--biz-color-bg-surface); }
+.biz-app .help-tour-card::before { background: var(--biz-color-bg-surface); }
+[data-bs-theme='dark'] .biz-app .form-select { --falcon-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23BBBEB8' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e"); }
+.biz-app .biz-settings-intro { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; margin-bottom: 24px; }
+.biz-app .biz-settings-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; align-items: start; }
+.biz-app .biz-settings-grid > section { margin: 0!important; min-width: 0; }
+.biz-app .biz-settings-step { align-items: center!important; }
+.biz-app .biz-settings-step > div { flex-basis: 200px!important; }
+.biz-app .biz-settings-step .btn { white-space: normal; text-align: center; }
+.biz-app .biz-settings-help { font-size: 13px; }
+.biz-app .biz-settings-help summary { cursor: pointer; font-weight: 600; }
+@media (min-width:1200px) { .biz-app .navbar-vertical.navbar-expand-xl + .content { margin-left: var(--biz-sidebar-width); } .biz-app .navbar-top .navbar-toggler { display: none; } }
+@media (max-width:1199.98px) {
+  .biz-app .navbar-vertical.navbar-expand-xl { width: 0; border: 0; background: transparent; }
+  .biz-app .navbar-vertical > .d-flex { display: none!important; }
+  .biz-app .navbar-vertical .navbar-collapse { position: fixed; top: 64px; left: 0; width: min(300px,calc(100vw - 32px)); max-height: calc(100dvh - 64px); height: auto!important; background: var(--biz-color-bg-surface); border: 1px solid var(--biz-color-border-subtle); box-shadow: var(--biz-shadow-overlay); border-radius: 0 0 8px 0; }
+  .biz-app .navbar-vertical .navbar-vertical-content { max-height: calc(100dvh - 64px); }
+  .biz-app #page-content { padding: 24px; }
+  .biz-app .navbar-top { padding: 8px 24px; }
+  .biz-app .mobile-brand .biz-brand { font-size: 20px; }
+  .biz-app .biz-sidebar-footer { padding-top: 20px; }
+  .biz-app .finance-grid { grid-template-columns: minmax(0,1fr); }
+  .biz-app .biz-settings-grid { gap: 16px; }
+}
+@media (max-width:767.98px) {
+  .biz-app { --app-card-padding: 16px; --app-layout-gap: 16px; --app-control-height: 44px; }
+  .biz-app #page-content { padding: 20px 16px; }
+  .biz-app .navbar-top { padding: 8px 16px; }
+  .biz-app .footer { padding: 0 16px; }
+  .biz-app #page-content h1 { font-size: 24px!important; line-height: 32px; }
+  .biz-app :is(.card-header,.finance-card-head) { padding: 16px; }
+  .biz-app .finance-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+  .biz-app .finance-kpi { padding: 16px; }
+  .biz-app .finance-kpi .kpi-value { font-size: 22px; }
+  .biz-app .finance-kpi .kpi-label { align-items: flex-start; gap: 4px; }
+  .biz-app .finance-kpi .kpi-label .svg-inline--fa { display: none; }
+  .biz-app .finance-heading .finance-actions { width: 100%; }
+  .biz-app .finance-heading .btn { white-space: normal; }
+  .biz-app :is(.finance-actions,.finance-pagination,.router-pagination) { flex-wrap: wrap; gap: 8px; }
+  .biz-app .finance-toolbar .form-select { flex: 1 1 140px; width: 100%; max-width: none; }
+  .biz-app .finance-mobile-sort { display: flex; align-items: center; width: 100%; gap: 8px; }
+  .biz-app .finance-mobile-sort label { flex-shrink: 0; }
+  .biz-app .finance-workspace-top { align-items: flex-start; }
+  .biz-app .finance-demo-label { text-align: right; max-width: 130px; }
+  .biz-app .finance-workspace-top { display: none; }
+  .biz-app .finance-kpi .kpi-value small { display: block; margin-bottom: 4px; }
+  .biz-app :is(.btn,.form-control,.form-select,.finance-nav a,.finance-tabs button) { min-height: 44px!important; }
+  .biz-app .finance-process { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .biz-app .review-workspace { gap: 16px; }
+  .biz-app .biz-settings-intro,.biz-app .biz-settings-grid { grid-template-columns: minmax(0,1fr); gap: 16px; }
+  .biz-app .lab .lab-scope { grid-template-columns: minmax(0,1fr); }
+  .biz-app .finance-grid.equal { grid-template-columns: minmax(0,1fr); }
+  /* Stacked records keep every field/action and real table semantics. Scroll comparisons instead. */
+  .biz-app #page-content .biz-record-table { min-width: 0; width: 100%; display: block; }
+  .biz-app .biz-record-table thead { display: block; }
+  .biz-app .biz-record-table thead tr { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--biz-color-border-subtle); }
+  .biz-app .biz-record-table thead th { display: none; }
+  .biz-app .biz-record-table thead th:has([data-routing-select-all]) { display: block; width: 100%; padding: 12px 16px; }
+  .biz-app .biz-record-table tbody { display: block; }
+  .biz-app .biz-record-table tbody tr { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 16px; padding: 16px; border-bottom: 1px solid var(--biz-color-border-subtle); }
+  .biz-app #page-content .biz-record-table tbody td { display: block; min-width: 0; padding: 0!important; border: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+  .biz-app .biz-record-table td::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 400; color: var(--biz-color-text-secondary); margin-bottom: 4px; }
+  .biz-app .biz-record-table td:first-child,.biz-app .biz-record-table td:last-child,.biz-app .biz-record-table td.biz-table-empty { grid-column: 1/-1; }
+  .biz-app .biz-record-table td:first-child::before,.biz-app .biz-record-table td.biz-table-empty::before { display: none; }
+  .biz-app .biz-record-table td:last-child > a:only-child { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; }
+  .biz-app .biz-record-table td:last-child .visually-hidden { position: static!important; width: auto!important; height: auto!important; margin: 0 0 0 8px!important; clip: auto!important; clip-path: none!important; white-space: normal!important; }
+  .biz-app .biz-record-table td .subtext { font-size: 12px; }
+  .biz-app .document-table td:first-child { min-width: 0; }
+  .biz-app .document-table td:first-child .d-flex > div { min-width: 0; overflow-wrap: anywhere; }
+  .biz-app .finance-status { white-space: normal; }
+}
+@media (max-width:374px) { .biz-app .finance-kpis { grid-template-columns: minmax(0,1fr); } .biz-app .navbar-top { padding-left: 8px; padding-right: 8px; } }
+@media (prefers-reduced-motion:reduce) { .biz-app *, .biz-app *::before, .biz-app *::after { animation: none!important; transition: none!important; scroll-behavior: auto!important; } }
+
+.biz-app :is(.badge-subtle-success,.bg-success-subtle,.alert-success) { color: var(--biz-color-success-fg); background: var(--biz-color-success-bg); }
+.biz-app .text-success { color: var(--biz-color-success-fg)!important; }
+.biz-app .btn-success { color: var(--biz-color-success-bg); background: var(--biz-color-success-fg); border-color: var(--biz-color-success-fg); }
+.biz-app .btn-outline-success { color: var(--biz-color-success-fg); background: var(--biz-color-bg-surface); border-color: var(--biz-color-success-fg); }
+.biz-app .btn-outline-success:hover { background: var(--biz-color-success-bg); }
+.biz-app .bg-success { background: var(--biz-color-success-bg)!important; color: var(--biz-color-success-fg)!important; }
+
+.biz-app :is(.badge-subtle-warning,.bg-warning-subtle,.alert-warning) { color: var(--biz-color-warning-fg); background: var(--biz-color-warning-bg); }
+.biz-app .text-warning { color: var(--biz-color-warning-fg)!important; }
+.biz-app .btn-warning { color: var(--biz-color-warning-bg); background: var(--biz-color-warning-fg); border-color: var(--biz-color-warning-fg); }
+.biz-app .btn-outline-warning { color: var(--biz-color-warning-fg); background: var(--biz-color-bg-surface); border-color: var(--biz-color-warning-fg); }
+.biz-app .btn-outline-warning:hover { background: var(--biz-color-warning-bg); }
+.biz-app .bg-warning { background: var(--biz-color-warning-bg)!important; color: var(--biz-color-warning-fg)!important; }
+
+.biz-app :is(.badge-subtle-danger,.bg-danger-subtle,.alert-danger) { color: var(--biz-color-error-fg); background: var(--biz-color-error-bg); }
+.biz-app .text-danger { color: var(--biz-color-error-fg)!important; }
+.biz-app .btn-danger { color: var(--biz-color-error-bg); background: var(--biz-color-error-fg); border-color: var(--biz-color-error-fg); }
+.biz-app .btn-outline-danger { color: var(--biz-color-error-fg); background: var(--biz-color-bg-surface); border-color: var(--biz-color-error-fg); }
+.biz-app .btn-outline-danger:hover { background: var(--biz-color-error-bg); }
+.biz-app .bg-danger { background: var(--biz-color-error-bg)!important; color: var(--biz-color-error-fg)!important; }
+
+.biz-app :is(.badge-subtle-info,.bg-info-subtle,.alert-info) { color: var(--biz-color-info-fg); background: var(--biz-color-info-bg); }
+.biz-app .text-info { color: var(--biz-color-info-fg)!important; }
+.biz-app .btn-info { color: var(--biz-color-info-bg); background: var(--biz-color-info-fg); border-color: var(--biz-color-info-fg); }
+.biz-app .btn-outline-info { color: var(--biz-color-info-fg); background: var(--biz-color-bg-surface); border-color: var(--biz-color-info-fg); }
+.biz-app .btn-outline-info:hover { background: var(--biz-color-info-bg); }
+.biz-app .bg-info { background: var(--biz-color-info-bg)!important; color: var(--biz-color-info-fg)!important; }
+
+.biz-app :is(.badge-subtle-primary,.bg-primary-subtle,.alert-primary) { color: var(--biz-color-info-fg); background: var(--biz-color-info-bg); }
+.biz-app .text-primary { color: var(--biz-color-info-fg)!important; }
+
+.biz-app .text-primary { color: var(--biz-color-action-default)!important; }

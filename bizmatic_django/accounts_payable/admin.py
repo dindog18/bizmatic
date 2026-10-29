@@ -1,3 +1,1 @@
-from django.contrib import admin
-
-# Register your models here.
+"""AP/AR reconciliation is provided by the models and their methods."""
