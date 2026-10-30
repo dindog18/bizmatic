@@ -137,3 +137,50 @@ class SetupChatTests(TestCase):
         row.refresh_from_db()
         self.assertEqual(row.messages, history)
         self.provider.assert_not_called()
+
+    def test_shared_activity_keeps_usage_but_no_private_chat_copies_after_clear(self):
+        for mode in ('ap', 'ar'):
+            with self.subTest(mode=mode):
+                marker = 'PRIVATE_MESSAGE_' + mode
+                reply = 'PRIVATE_REPLY_' + mode
+                values = self.values(mode)
+                values['description'] = 'PRIVATE_DRAFT_' + mode
+                self.provider.return_value = {'message': {'content': json.dumps({'message': reply})},
+                                              'prompt_eval_count': 17, 'eval_count': 9}
+                body = self.body(values, message=marker)
+                response = self.post('setup-chat', body, mode)
+                self.assertEqual(response.status_code, 200, response.content)
+                self.assertEqual(response.json()['messages'][1]['content'], reply)
+                log = model(mode, 'LLMExtractionLog').objects.get(pk=response.json()['llm_log_no'])
+                self.assertEqual((log.status, log.input_tokens, log.output_tokens), ('completed', 17, 9))
+                self.assertEqual(log.configuration_snapshot, {})
+                self.assertEqual(log.markdown_text, '')
+                self.assertTrue(log.request_payload['content_redacted'])
+                self.assertTrue(log.response_payload['content_redacted'])
+                # The actual provider still receives all current inputs and saved history.
+                second = self.post('setup-chat', self.body(values, 1, 'Follow up'), mode)
+                self.assertEqual(second.status_code, 200, second.content)
+                ctx = json.loads(self.provider.call_args.args[1]['messages'][1]['content'])
+                self.assertEqual(ctx['conversation'][0]['content'], marker)
+                self.assertEqual(ctx['configuration']['description'], values['description'])
+                other = Client()
+                slug = 'accounts-payable' if mode == 'ap' else 'accounts-receivable'
+                for cleared in (False, True):
+                    if cleared:
+                        self.assertEqual(self.post('setup-chat-clear', {**body, 'chat_revision': 2}, mode).status_code, 200)
+                    activity = other.get(f'/{slug}/llm-logs/')
+                    for private in (marker, reply, values['description']):
+                        self.assertNotContains(activity, private)
+
+    def test_private_failed_attempts_do_not_copy_raw_response_or_error_text(self):
+        marker = 'PRIVATE_PROVIDER_CONTENT'
+        for payload in ({'message': {'content': marker}}, {'message': {'content': json.dumps({'message': marker, 'updates': {'name': marker}})}}, [marker]):
+            self.provider.return_value = payload
+            response = self.post('setup-chat', self.body(self.values(), message=marker))
+            self.assertEqual(response.status_code, 400, response.content)
+            log = model('ap', 'LLMExtractionLog').objects.latest('pk')
+            self.assertNotIn(marker, json.dumps({field.name: field.value_from_object(log) for field in log._meta.fields}, default=str))
+        self.provider.side_effect = ValueError(marker)
+        response = self.post('setup-chat', self.body(self.values()))
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertNotContains(Client().get('/accounts-payable/llm-logs/'), marker)

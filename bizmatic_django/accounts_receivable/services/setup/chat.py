@@ -80,7 +80,7 @@ def reply(request, mode, data, record):
            'message': message.strip(), 'conversation': history}
     if record.source_type == 'database':
         ctx['sources'] = [source for source in context.sources(record) if source['id'] == str(record.database_source_id)]
-    log, answer = llm.run(mode, record, 'configuration', SYSTEM, ctx, response_schema=SCHEMA)
+    log, answer = llm.run(mode, record, 'configuration', SYSTEM, ctx, response_schema=SCHEMA, private_context=True)
     if answer is None:
         raise attempt_error(log.error_message, log)
     if set(answer) != {'message'} or not isinstance(answer['message'], str) or not answer['message'].strip() or len(answer['message']) > 16000:
