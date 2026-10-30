@@ -8,14 +8,16 @@ server {
     location /static/ {
         alias /srv/static/;
         add_header X-Content-Type-Options nosniff always;
-        expires 1h;
+        expires ${STATIC_CACHE_TTL};
+        add_header Cache-Control "${STATIC_CACHE_CONTROL}" always;
     }
 
     location ~ ^/static/.*\.mjs$ {
         root /srv;
         types { application/javascript mjs; }
         add_header X-Content-Type-Options nosniff always;
-        expires 1h;
+        expires ${STATIC_CACHE_TTL};
+        add_header Cache-Control "${STATIC_CACHE_CONTROL}" always;
     }
 
     location / {

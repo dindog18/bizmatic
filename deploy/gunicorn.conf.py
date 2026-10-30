@@ -2,7 +2,7 @@
 import os
 
 bind = '0.0.0.0:8000'
-workers = int(os.getenv('WEB_WORKERS', '2'))
+workers = int(os.getenv('WEB_WORKERS', '1'))
 worker_class = 'sync'
 timeout = int(os.getenv('REQUEST_TIMEOUT_SECONDS', '600'))
 if timeout < 1:

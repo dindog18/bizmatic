@@ -1,0 +1,22 @@
+# Editable source, automatic Python reload, and uncached UI assets.
+services:
+  app:
+    environment:
+      BIZMATIC_DEV_MODE: "true"
+    command: [gunicorn, --reload, --config, /app/deploy/gunicorn.conf.py, 'bizmatic_django.wsgi:application']
+    volumes:
+      - ./bizmatic_django/bizmatic_django:/app/bizmatic_django:ro
+      - ./bizmatic_django/document_extraction:/app/document_extraction:ro
+      - ./bizmatic_django/accounts_receivable:/app/accounts_receivable:ro
+      - ./bizmatic_django/accounts_payable:/app/accounts_payable:ro
+      - ./bizmatic_django/db_extraction:/app/db_extraction:ro
+      - ./bizmatic_django/router:/app/router:ro
+      - ./deploy:/app/deploy:ro
+  proxy:
+    environment:
+      STATIC_CACHE_TTL: 'off'
+      STATIC_CACHE_CONTROL: no-store
+    volumes:
+      - ./bizmatic_django/document_extraction/static/document_extraction:/srv/static/document_extraction:ro
+      - ./bizmatic_django/accounts_receivable/static/accounting:/srv/static/accounting:ro
+      - ./bizmatic_django/router/static/router:/srv/static/router:ro

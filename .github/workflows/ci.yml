@@ -30,6 +30,8 @@ jobs:
           cache-dependency-path: requirements.txt
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
+      - name: CLI regression tests
+        run: python -m unittest deploy.test_cli
       - name: Check dependency compatibility
         run: python -m pip check
       - name: Check Django configuration
@@ -49,27 +51,36 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlite, postgres]
     steps:
       - uses: actions/checkout@v4
-      - name: Generate isolated test configuration
-        run: python3 deploy/configure.py --port 18005
-      - name: Build and start the complete stack
-        run: ./deploy/compose -p bizmatic-ci up -d --build --wait --wait-timeout 180
-      - name: Full Django suite on PostgreSQL
-        run: ./deploy/compose -p bizmatic-ci exec -T app python manage.py test --noinput
+      - name: Generate user-owned test storage and configuration
+        run: ./bizmatic init --yes --database ${{ matrix.database }} --port 18005
+      - name: Build and start through the user CLI
+        run: ./bizmatic --project-name bizmatic-ci start --wait-timeout 180
+      - name: Full Django suite in Docker
+        run: ./bizmatic --project-name bizmatic-ci manage test --noinput
       - name: Test routes, MIME types and CSRF-protected extraction
         run: python3 deploy/smoke.py --base-url http://127.0.0.1:18005 --write-fixture
       - name: Verify restart, encrypted credentials and persistent originals
         run: |
-          ./deploy/compose -p bizmatic-ci exec -T app python manage.py shell -c 'from db_extraction.models import DatabaseSource; DatabaseSource.objects.create(name="ci-key-check", host="fixture.invalid", database_name="fixture", username="reader", password="synthetic-ci-password")'
-          ./deploy/compose -p bizmatic-ci restart app
-          ./deploy/compose -p bizmatic-ci up -d --wait --wait-timeout 180
+          ./bizmatic --project-name bizmatic-ci manage shell -c 'from db_extraction.models import DatabaseSource; DatabaseSource.objects.create(name="ci-key-check", host="fixture.invalid", database_name="fixture", username="reader", password="synthetic-ci-password")'
+          ./bizmatic --project-name bizmatic-ci compose -- restart app
+          ./bizmatic --project-name bizmatic-ci start --no-build --wait-timeout 180
           python3 deploy/smoke.py --base-url http://127.0.0.1:18005
-          ./deploy/compose -p bizmatic-ci exec -T app python manage.py shell -c 'from db_extraction.models import DatabaseSource; assert DatabaseSource.objects.get(name="ci-key-check").password == "synthetic-ci-password"'
+          ./bizmatic --project-name bizmatic-ci manage shell -c 'from db_extraction.models import DatabaseSource; assert DatabaseSource.objects.get(name="ci-key-check").password == "synthetic-ci-password"'
           curl --fail http://127.0.0.1:18005/documents/1/original/ | grep 'Bizmatic Docker smoke fixture'
+      - name: Verify live UI and backend development reload
+        if: matrix.database == 'sqlite'
+        run: |
+          ./bizmatic --project-name bizmatic-ci start --dev --no-build --wait-timeout 180
+          python3 deploy/check_reload.py --base-url http://127.0.0.1:18005 --allow-source-edits
       - name: Container logs on failure
         if: failure()
-        run: ./deploy/compose -p bizmatic-ci logs --tail 100 app proxy db
-      - name: Remove disposable CI stack
+        run: ./bizmatic --project-name bizmatic-ci logs --tail 100
+      - name: Remove disposable CI containers and caches
         if: always()
-        run: ./deploy/compose -p bizmatic-ci down -v --remove-orphans
+        run: ./bizmatic --project-name bizmatic-ci compose -- down -v --remove-orphans

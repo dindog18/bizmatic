@@ -1,6 +1,5 @@
 #!/bin/sh
+# Compatibility wrapper. New installations should use bizmatic start/stop/update.
 set -eu
 project_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-BIZMATIC_ENV_FILE=${BIZMATIC_ENV_FILE:-$project_root/.env.docker}
-export BIZMATIC_ENV_FILE
-exec docker compose --project-directory "$project_root" --env-file "$BIZMATIC_ENV_FILE" -f "$project_root/compose.yaml" "$@"
+exec "$project_root/bizmatic" compose -- "$@"

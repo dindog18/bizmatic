@@ -16,7 +16,8 @@ def load_project_env() -> None:
     Missing files are allowed for deployments and CI configured entirely through
     the environment. Restart the process after editing .env to reload its values.
     """
-    load_dotenv(dotenv_path=ENV_PATH, override=False)
+    if os.environ.get('BIZMATIC_LOAD_PROJECT_ENV', 'true').lower() not in {'0', 'false', 'no', 'off'}:
+        load_dotenv(dotenv_path=ENV_PATH, override=False)
 
 
 def get_env(name: str, default: str = "") -> str:

@@ -81,3 +81,9 @@ class ProjectEnvironmentTests(SimpleTestCase):
         from .services.storage import get_env
 
         self.assertEqual(get_env("LOCAL_FILE_STORAGE_PATH"), "/tmp/test uploads")
+
+    def test_container_mode_does_not_load_native_environment(self):
+        self.env_path.write_text('LOCAL_ONLY_VALUE=private-native-setting\n')
+        os.environ['BIZMATIC_LOAD_PROJECT_ENV'] = 'false'
+        environment.load_project_env()
+        self.assertNotIn('LOCAL_ONLY_VALUE', os.environ)

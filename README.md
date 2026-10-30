@@ -21,24 +21,28 @@ See the [query builder guide](bizmatic_django/accounts_receivable/QUERY_BUILDER.
 - PostgreSQL 14 or newer for external database extraction. Source connection profiles are configured in the application.
 - An optional LLM provider and suitable model for provider-dependent extraction, routing, or setup assistance. Local browsing and database query preparation do not require an LLM.
 
-## Docker on Ubuntu
-
-Use the [Docker deployment guide](deploy/README.md) for a complete Django/Gunicorn,
-PostgreSQL and Nginx stack, persistent uploads and credential keys, automatic
-migrations, PDF preview MIME types, and aligned request timeouts. From the
-repository root, generate a private configuration and start the stack:
+## Start Bizmatic (Docker by default)
 
 ```sh
-python3 deploy/configure.py --host YOUR_SERVER_IP --port 8005
-# Review .env.docker, including the listener address and LLM settings.
-./deploy/compose up -d --build --wait --wait-timeout 180
+./bizmatic init       # choose your SQLite file, uploads and credential-key folder
+# Review .env.docker: server address, provider/model settings and API keys.
+./bizmatic start
+./bizmatic stop       # retains data and keys
+./bizmatic help
 ```
 
-The listener defaults to loopback. The guide explains enabling trusted LAN access,
-connecting host/container Ollama, migrating an existing installation, backups,
-and restoring the original credential key. Existing data is not imported automatically.
+Docker runs Django/Gunicorn and Nginx with **SQLite by default**. You provide
+persistent host paths and runtime settings; no developer secrets or database
+are included in the image. Use `./bizmatic start --dev` while editing Python,
+templates, JS or CSS, and `./bizmatic update` to rebuild production code without
+resetting data. PostgreSQL is an explicit alternative.
 
-## Getting started
+See the [running/deployment guide](deploy/README.md) for the command reference,
+Ubuntu setup, PATH installation, backups, model configuration and mode switching.
+Native Python remains fully supported below; `./bizmatic runserver` is also a
+shortcut to the same native development server.
+
+## Native Python setup (without Docker)
 
 Run these commands from the repository root on macOS or Linux:
 

@@ -62,3 +62,6 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# User-selected local Docker data and CLI state
+.bizmatic/

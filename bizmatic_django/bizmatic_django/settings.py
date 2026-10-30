@@ -122,6 +122,14 @@ TEMPLATES = [
     },
 ]
 
+# Development containers reread template edits without enabling debug pages.
+if os.getenv('BIZMATIC_DEV_MODE', 'false').lower() in {'1', 'true', 'yes', 'on'}:
+    TEMPLATES[0]['APP_DIRS'] = False
+    TEMPLATES[0]['OPTIONS']['loaders'] = [
+        'django.template.loaders.filesystem.Loader',
+        'django.template.loaders.app_directories.Loader',
+    ]
+
 WSGI_APPLICATION = "bizmatic_django.wsgi.application"
 
 
@@ -135,6 +143,7 @@ if database_engine == 'django.db.backends.sqlite3':
         'default': {
             'ENGINE': database_engine,
             'NAME': os.getenv('DB_NAME', BASE_DIR / 'db.sqlite3'),
+            'OPTIONS': {'timeout': int(os.getenv('DB_SQLITE_TIMEOUT_SECONDS', '30'))},
         }
     }
 else:

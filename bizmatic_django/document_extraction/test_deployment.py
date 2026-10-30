@@ -83,7 +83,7 @@ class DeploymentConfigurationTests(SimpleTestCase):
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
         with TemporaryDirectory() as folder:
             output = Path(folder) / '.env.docker'
-            module.configure(output, '192.0.2.10', 8005)
+            module.configure(output, '192.0.2.10', 8005, database_file=Path(folder)/'data/app.sqlite3', uploads_dir=Path(folder)/'uploads', key_dir=Path(folder)/'keys')
             original = output.read_text()
             self.assertEqual(output.stat().st_mode & 0o777, 0o600)
             self.assertIn('192.0.2.10', original)
