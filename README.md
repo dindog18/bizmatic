@@ -146,6 +146,14 @@ They do not isolate native PDF decompression, XML parsing, legacy XLS parsing,
 or browser previews. Keep hosting access restrictions and worker resource limits
 appropriate for untrusted documents. No database migration is required.
 
+## Setup assistant conversations
+
+AP and AR document and database setup include an advice-only Setup assistant. It uses the current inputs and the saved conversation to answer questions; it cannot edit settings, prompts, extracted text, mappings, or accounting data.
+
+Each signed-in user (or anonymous browser session) has one continuous conversation per workspace, record type, and extraction source, shared across configurations with that selection. Messages are saved immediately, even before the configuration is saved. **Clear chat** deletes that conversation and keeps the setup inputs. There is no conversation list. At 100 messages or the input size limit, clear the chat to continue; older messages are never silently dropped. Provider attempt logs remain available in LLM activity as audit evidence and are not used as conversation context after clearing. Existing configuration-bound assistant messages are retained only as historical data and are not imported into these new conversations.
+
+Apply the included database migration with `python bizmatic_django/manage.py migrate`. No new environment variables or dependencies are required; replies use the existing `CONFIG_ASSISTANT_*` provider settings.
+
 ## Database extraction workflow
 
 1. Add and test a PostgreSQL connection, then refresh its schema.

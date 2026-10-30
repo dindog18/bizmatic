@@ -23,9 +23,15 @@ class RecordSetupTests(TestCase):
         provider.start(); self.addCleanup(provider.stop)
 
     def respond(self, result):
+        if result.get('updates') == {}:
+            result = {key: value for key, value in result.items() if key != 'updates'}
         self.provider.return_value = {'message': {'content': json.dumps(result)}}
 
     def post(self, mode, action, data, record_id=None):
+        if action == 'setup-chat':
+            selection = {key: data['configuration'][key] for key in ('target_entity', 'source_type')}
+            history = self.post(mode, 'setup-chat-history', {'selection': selection}).json()
+            data = {**data, 'selection': selection, 'chat_revision': history['chat_revision']}
         slug = 'accounts-payable' if mode == 'ap' else 'accounts-receivable'
         return self.client.post(f'/{slug}/api/{action}/'+(f'{record_id}/' if record_id else ''), data, content_type='application/json')
 
@@ -437,14 +443,14 @@ class RecordSetupTests(TestCase):
             self.assertNotIn('annotation', rule)
             self.assertNotIn('example', rule)
 
-    def test_chat_mapping_patch_preserves_other_fields(self):
+    def test_chat_rejects_mapping_patch_without_changing_inputs(self):
         record, query = self.query()
         self.respond({'message': 'Use the supplier code as requested. Review and test the updated mapping.',
                       'updates': {'database': {'mappings': [{'id': 'header:supplier_code', 'transform': 'trim'}]}}})
         response = self.post('ap', 'setup-chat', {'configuration': configuration.snapshot(record), 'message': 'Trim the supplier code.'})
-        self.assertEqual(response.status_code, 200, response.content)
-        mappings = {item['id']: item for item in response.json()['record']['setup_data']['database']['mappings']}
-        self.assertEqual(mappings['header:supplier_code']['transform'], 'trim')
+        self.assertEqual(response.status_code, 400, response.content)
+        mappings = {item['id']: item for item in record.setup_data['database']['mappings']}
+        self.assertEqual(mappings['header:supplier_code'].get('transform', 'identity'), 'identity')
         self.assertEqual(mappings['header:supplier_code']['column'], 'base.supplier_code')
         self.assertEqual(mappings['header:supplier_name']['column'], 'base.supplier_name')
         self.assertEqual(self.provider.call_args.kwargs['config_prefix'], 'CONFIG_ASSISTANT')

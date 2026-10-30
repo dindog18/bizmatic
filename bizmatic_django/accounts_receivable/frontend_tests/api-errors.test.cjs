@@ -32,3 +32,20 @@ test('successful JSON responses pass through unchanged',async()=>{
   const {api}=client({status:200,ok:true,json:async()=>result});
   assert.equal(await api.post('setup-generate',null,{}),result);
 });
+test('background chat does not disable setup controls or hold the foreground request lock',async()=>{
+  let finish;
+  const response={status:200,ok:true,json:()=>new Promise(resolve=>{finish=resolve;})};
+  const {api,controls}=client(response);
+  const chat=api.post('setup-chat-history',null,{}, {background:true});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(controls[0].disabled,false);
+  const finishChat=finish;
+  const source=api.post('setup-document',null,{});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(controls[0].disabled,true);
+  finishChat({messages:[]});await chat;
+  assert.equal(controls[0].disabled,true,'Finishing chat must not unlock another request');
+  await assert.rejects(api.post('setup-test',null,{}),/Wait for the current action/);
+  finish({text:'Example document'});await source;
+  assert.equal(controls[0].disabled,false);
+});

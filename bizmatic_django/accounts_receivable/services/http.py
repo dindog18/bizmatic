@@ -47,7 +47,8 @@ def perform(request, mode, action, record_id=None):
         if action == "configuration-reset-context":
             return JsonResponse(configuration_chat.reset_context(mode, data, record_id))
         if action == "configuration-chat":
-            return JsonResponse(configuration_chat.chat(mode, data, record_id))
+            from .setup.chat import reply
+            return JsonResponse(reply(request, mode, data, configuration_chat.draft(mode, data, record_id)))
         if action == "configuration-preview":
             return JsonResponse(configuration_chat.preview(mode, data, record_id))
         if action == "configuration-review":

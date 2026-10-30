@@ -33,7 +33,7 @@ async function page(savedStorage,mode='ar',record=null,target='purchase_order'){
   const field={key:'po_number',label:'PO number',required:true,type:'CharField'};
   const result={passed:true,issues:[],rows:[{key:'header:po_number',label:'PO number',required:true,
     value:'PO-001',expected:'PO-001',status:'passed'}],record:{po_number:'PO-001'},lines:[],llm_log_no:7,test_token:'signed-test'};
-  const window={localStorage:savedStorage,ConfigurationDocumentEngine:require('../static/accounting/setup/annotations.js'),
+  const window={SetupAssistantChat:{create:()=>({mount(){}})},localStorage:savedStorage,ConfigurationDocumentEngine:require('../static/accounting/setup/annotations.js'),
     BizmaticAccounting:{state:{parties:[]},post:async(action,id,body)=>{
       calls.push({action,id,body});
       if(action==='setup-context')return {record,documents:[],catalog:['purchase_order','payment'].map(key=>({key,label:key,fields:[field],lineFields:[]}))};
