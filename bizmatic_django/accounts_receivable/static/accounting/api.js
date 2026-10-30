@@ -3,10 +3,10 @@ window.BizmaticAccounting = (() => {
   const config = JSON.parse(document.getElementById('finance-config').textContent);
   const state = JSON.parse(document.getElementById('finance-state').textContent);
   let busy = false;
-  async function post(action, id, values) {
-    if (busy) throw new Error('Wait for the current action to finish.');
-    busy = true;
-    const controls = [...document.querySelectorAll('button,input,select,textarea')].filter(control => !control.disabled);
+  async function post(action, id, values, {background = false} = {}) {
+    if (!background && busy) throw new Error('Wait for the current action to finish.');
+    if (!background) busy = true;
+    const controls = background ? [] : [...document.querySelectorAll('button,input,select,textarea')].filter(control => !control.disabled);
     controls.forEach(control => control.disabled = true);
     try {
       const url = config.api.replace('/action/', '/' + action + '/') + (id ? id + '/' : '');
@@ -39,7 +39,7 @@ window.BizmaticAccounting = (() => {
     } catch (error) {
       if (error instanceof Error) throw error;
       throw new Error(error.message || 'The server could not be reached. Reload to check the saved state.');
-    } finally { busy = false; controls.forEach(control => control.disabled = false); }
+    } finally { if (!background) busy = false; controls.forEach(control => control.disabled = false); }
   }
   return {state, post};
 })();

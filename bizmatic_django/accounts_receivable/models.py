@@ -16,6 +16,20 @@ from document_extraction.models import LLMRunStatus
 from . import services
 
 
+class SetupAssistantChat(models.Model):
+    """One personal, continuous conversation for each AR/AP setup selection."""
+
+    owner = models.CharField(max_length=80)
+    workspace = models.CharField(max_length=2, choices=[('ar', 'Accounts receivable'), ('ap', 'Accounts payable')])
+    target_entity = models.CharField(max_length=40)
+    source_type = models.CharField(max_length=10, choices=[('document', 'Documents'), ('database', 'Database')])
+    messages = models.JSONField(default=list)
+    revision = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['owner', 'workspace', 'target_entity', 'source_type'], name='setup_assistant_chat_scope_uq')]
+
+
 class Customer(models.Model):
     """Customer identity, contact information, credit limit, and payment terms."""
 

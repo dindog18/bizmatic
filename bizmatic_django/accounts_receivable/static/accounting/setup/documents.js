@@ -41,7 +41,7 @@
     const snapshot=()=>JSON.stringify([state.prompt,testText(),expectations(),state.promptStale,state.rules]);
     const canSubmit=()=>state.result&&!state.stale&&state.result.snapshot===snapshot()&&!state.confirmed&&api.hasReceipt();
     function steps(){return `<nav class='da-steps card' aria-label='Document setup steps'>${[['Choose text','Choose or paste an extraction'],['Annotate','Highlight and map values'],['Prompt & test','Check every field']].map(([label,description],index)=>`<button type='button' data-da='step' data-step='${index+1}' ${index===1&&!state.locked||index===2&&!ready()?'disabled':''} ${state.step===index+1?"aria-current='step'":''}><span>${index+1}</span><div><strong>${label}</strong><small>${description}</small></div></button>`).join('')}</nav>`;}
-    function help(){return card('Setup assistant','Configuration assistant',`<div class='da-help-copy'>${state.messages.length?state.messages.slice(-3).map(message=>`<p>${esc(message)}</p>`).join(''):`<p>${state.step===1?'Choose an extracted document or paste your own text. You can edit either before annotating.':state.step===2?'Highlight only the value, then choose its destination field. All line item fields are optional. Leave them empty when no item data is available. Other optional fields can stay empty too.':'Test the generated rules against the annotated sample or another extraction. Review every result before submitting.'}</p>`}</div><form id='da-help-form'><label for='da-question'>Ask about this setup</label><textarea id='da-question' class='form-control' rows='2' placeholder='e.g. What is still missing?'>${esc(state.question)}</textarea><div class='da-actions mt-2'>${button('What is missing?','help-missing','','btn-link')}<button type='submit' class='btn btn-falcon-default btn-sm'>Ask</button></div></form>`);}
+    function help(){return `<div data-setup-chat></div>`;}
     function chooseText(){return `<div class='da-layout'><div>${card('1. Choose your sample text','Use text that has already been extracted from a document.',`<div class='da-source-choices' role='group' aria-label='Sample text source'>${button('Choose extracted document','source-sample',`aria-pressed='${state.sourceMode==='sample'}'`,state.sourceMode==='sample'?'btn-primary':'btn-falcon-default')}${button('Paste my text','source-paste',`aria-pressed='${state.sourceMode==='paste'}'`,state.sourceMode==='paste'?'btn-primary':'btn-falcon-default')}</div>${state.sourceMode==='sample'?`<label for='da-sample'>Extracted document</label><select id='da-sample' class='form-select mb-3'>${documents.map(document=>`<option value='${document.id}'${String(state.sample)===String(document.id)?' selected':''}>${esc(document.name)} · extraction #${document.id}</option>`).join('')}</select>`:`<p class='lab-note'>Paste plain text or Markdown. It stays editable until you use it for annotation.</p>`}<label for='da-source-text'>Extracted document text</label><textarea id='da-source-text' class='form-control da-source-text' rows='17' spellcheck='false' placeholder='Paste the extracted document here…'>${esc(state.draft)}</textarea>${state.locked?`<p class='lab-note mt-2'>Changing the text clears its highlights, generated prompt, and previous test.</p>`:''}<div class='da-actions mt-3'><span class='lab-note'>${state.sourceMode==='sample'?'Extracted text is editable. The original document stays available.':'Paste text from your document extraction.'}</span>${state.locked?button('Keep original text','cancel-edit'):''}${button(state.locked?'Use updated text':'Use text & annotate','lock-text',state.draft.trim()?'':'disabled','btn-primary')}</div>` )}</div><aside>${help()}</aside></div>`;}
     function markedText(){
       const highlights=fields.filter(field=>state.rules[field.key].method==='extract').map(field=>({...state.rules[field.key].annotation,field})).filter(item=>Number.isInteger(item.start)&&item.end<=state.text.length);
@@ -76,6 +76,7 @@
       const text=root.querySelector('#da-annotation-text');
       if(text&&state.selection)text.setSelectionRange(state.selection.start,state.selection.end);
       api.progress?.(state);
+      api.mountChat(root.querySelector('[data-setup-chat]'));
     }
     function captureSelection(event){
       if(event.target.id!=='da-annotation-text')return;
@@ -134,10 +135,6 @@
       finally{rebuilding=false;render();}
       root.querySelector('#da-prompt')?.focus();
     }
-    async function helpReply(){
-      if(!state.question.trim())return;
-      try{const response=await api.chat(state.question);const updated=response.record.setup_data.document;const previousPrompt=state.prompt,previousRules=JSON.stringify(state.rules),previousInstructions=state.instructions;Object.assign(state,updated);state.rules={...freshRules(),...state.rules};normalizeRules();state.messages.push(response.message);state.question='';if(response.changed){const rulesChanged=previousRules!==JSON.stringify(state.rules)||previousInstructions!==state.instructions;invalidate(rulesChanged&&previousPrompt===state.prompt);state.promptStale=false;}render();}catch(error){api.error(error);}
-    }
     root.addEventListener('input',event=>{
       const el=event.target;
       if(el.id==='da-source-text'){state.draft=el.value;root.querySelector('[data-da="lock-text"]').disabled=!el.value.trim();}
@@ -148,7 +145,6 @@
       else if(el.id==='da-rule-example'){ruleFor().example=el.value;invalidate(true);}
       else if(el.id==='da-anchor'){ruleFor().annotation.anchor.label=el.value;invalidate(true);}
       else if(el.dataset.expected){state.customExpected[el.dataset.expected]=el.value;invalidate();updateTestState();}
-      else if(el.id==='da-question')state.question=el.value;
       api.progress?.(state);
     });
     root.addEventListener('change',async event=>{
@@ -163,7 +159,6 @@
       }
       else if(el.id==='da-test-source'){state.testSource=el.value;state.customExpected={};state.result=null;state.confirmed=false;state.stale=false;api.changed();if(el.value.startsWith('saved:')){try{const document=await api.document(el.value.slice(6));state.testDraft=document.text;}catch(error){api.error(error);}}else state.testDraft='';render();}
     });
-    root.addEventListener('submit',event=>{if(event.target.id==='da-help-form'){event.preventDefault();helpReply();}});
     root.addEventListener('click',async event=>{
       const control=event.target.closest('[data-da]');if(!control||control.disabled)return;
       const action=control.dataset.da;
@@ -188,7 +183,6 @@
       else if(action==='rebuild-prompt')await generatePrompt();
       else if(action==='rebuild-results')await rebuildFromResults();
       else if(action==='test')runTest();
-      else if(action==='help-missing'){state.question='What is missing?';helpReply();}
       else if(action==='review'){if(canSubmit()){try{if(await api.review(true)){state.confirmed=true;state.notice='Configuration saved and activated.';render();}}catch(error){api.error(error);}}}
     });
     render();if(!state.draft&&!state.text&&state.sourceMode==='sample'&&state.sample)api.document(state.sample).then(document=>{state.draft=document.text;render();}).catch(api.error);return state;

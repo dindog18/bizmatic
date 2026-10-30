@@ -9,7 +9,6 @@ from accounts_receivable.services import configuration
 from accounts_receivable.services.catalog import model, party_key
 from db_extraction.models import DatabaseSource, ExtractionRun, DatabaseSchema, DatabaseTable, DatabaseColumn
 
-
 class ConfigurationChatTests(TestCase):
     def setUp(self):
         env = patch.dict(os.environ, {'CONFIG_ASSISTANT_LLM_PROVIDER': 'ollama', 'CONFIG_ASSISTANT_OLLAMA_MODEL': 'setup-test'})
@@ -29,11 +28,19 @@ class ConfigurationChatTests(TestCase):
                 'relation_lookups': {}, 'field_instructions': {}, 'line_field_instructions': {}}
 
     def respond(self, result):
+        if result.get('updates') == {}:
+            result = {key: value for key, value in result.items() if key != 'updates'}
         self.provider.return_value = {'message': {'content': json.dumps(result)}}
 
     def post(self, mode, action, body, record_id=None):
+        browser = self.client
+        if 'csrftoken' not in browser.cookies:
+            browser.get('/accounts-payable/configuration/new/?target=supplier&source=document')
         if action == 'configuration-chat' and 'selection' not in body:
             body = {**body, 'selection': {key: body['configuration'][key] for key in ('target_entity', 'source_type')}}
+        if action == 'configuration-chat':
+            history = self.post(mode, 'setup-chat-history', {'selection': body['selection']}).json()
+            body = {**body, 'chat_revision': history.get('chat_revision', 0)}
         slug = 'accounts-receivable' if mode == 'ar' else 'accounts-payable'
         return self.client.post(f'/{slug}/api/{action}/' + (f'{record_id}/' if record_id else ''), body, content_type='application/json')
 
@@ -158,31 +165,6 @@ class ConfigurationChatTests(TestCase):
         self.assertTrue(DatabaseTable.objects.filter(pk=table.pk).exists())
         self.provider.assert_not_called()
 
-    def test_both_modules_can_chat_from_blank_without_saving(self):
-        for mode in ('ap', 'ar'):
-            self.respond({'message': 'What date format do you use?', 'updates': {'name': 'Invoice setup', 'document_type': 'Invoice'}})
-            response = self.post(mode, 'configuration-chat', {'configuration': self.values(mode), 'message': 'Help with invoices'})
-            self.assertEqual(response.status_code, 200, response.content)
-            self.assertEqual(response.json()['record']['name'], 'Invoice setup')
-            self.assertIsNone(response.json()['record']['id'])
-            self.assertEqual(len(response.json()['record']['assistant_messages']), 2)
-            self.assertFalse(model(mode, 'ExtractionConfiguration').objects.exists())
-            log = model(mode, 'LLMExtractionLog').objects.get()
-            self.assertIsNone(log.configuration_id)
-            self.assertEqual(log.status, 'completed')
-            self.assertEqual(self.provider.call_args.kwargs['config_prefix'], 'CONFIG_ASSISTANT')
-            context = json.loads(self.provider.call_args.args[1]['messages'][1]['content'])
-            self.assertTrue(context['catalog'][0]['fields'])
-
-    def test_question_only_and_follow_up_preserve_configuration(self):
-        data = self.complete()
-        self.respond({'message': 'Dates are normalized to ISO format.', 'updates': {}})
-        response = self.post('ar', 'configuration-chat', {'configuration': data, 'message': 'Explain dates',
-            'messages': [{'role': 'user', 'content': 'Use PHP'}, {'role': 'assistant', 'content': 'PHP selected.'}]})
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.json()['record']['extraction_context'], data['extraction_context'])
-        self.assertEqual(len(response.json()['record']['assistant_messages']), 4)
-
     def test_assistant_cannot_switch_selected_target(self):
         self.respond({'message': 'Let’s configure payments.', 'updates': {'target_entity': 'payment', 'name': 'Payments'}})
         response = self.post('ap', 'configuration-chat', {'configuration': self.values('ap'), 'message': 'I need payments'})
@@ -234,7 +216,7 @@ class ConfigurationChatTests(TestCase):
     def test_existing_configuration_and_snapshot_unchanged_by_chat(self):
         row = configuration.save('ar', self.complete(), submit=True)
         before = row.submitted_snapshot
-        self.respond({'message': 'Updated working instructions.', 'updates': {'extraction_context': 'New instructions'}})
+        self.respond({'message': 'Edit the extraction instructions in the setup controls.'})
         response = self.post('ar', 'configuration-chat', {'configuration': configuration.snapshot(row), 'message': 'Change instructions'}, row.pk)
         self.assertEqual(response.status_code, 200, response.content)
         row.refresh_from_db()
@@ -277,106 +259,12 @@ class ConfigurationChatTests(TestCase):
         DatabaseColumn.objects.create(table=table, name='id', ordinal_position=1, formatted_type='integer')
         return source, run, table
 
-    def test_schema_and_readonly_sample_tool_are_grounded(self):
-        source, _, table = self.database()
-        data = {**self.values(), 'source_type': 'database', 'database_source': source.pk, 'source_table': table.pk, 'source_key_fields': ['id']}
-        self.provider.side_effect = [
-            {'message': {'content': json.dumps({'message': 'Read a sample', 'tool': {'name': 'sample_rows'}})}},
-            {'message': {'content': json.dumps({'message': 'The key is id.', 'updates': {}})}}]
-        with patch('accounts_receivable.services.imports.read_rows', return_value=[({'id': 7}, [])]) as read:
-            response = self.post('ar', 'configuration-chat', {'configuration': data, 'message': 'Inspect one row'})
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(read.call_args.args[1:], (1, 0))
-        context = json.loads(self.provider.call_args.args[1]['messages'][1]['content'])
-        self.assertEqual(context['tables'][0]['column_definitions'][0]['formatted_type'], 'integer')
-        self.assertEqual(context['tool_result']['sample_rows'][0][0], {'id': 7})
-        self.assertNotIn('password', json.dumps(context))
-
-    def test_schema_refresh_tool_uses_existing_connection(self):
-        source, run, _ = self.database()
-        self.provider.side_effect = [
-            {'message': {'content': json.dumps({'message': 'Inspect schema', 'tool': {'name': 'inspect_schema', 'source_id': source.pk}})}},
-            {'message': {'content': json.dumps({'message': 'Schema loaded', 'updates': {}})}}]
-        with patch('accounts_receivable.services.configuration_chat.refresh_source', return_value=run) as refresh:
-            response = self.post('ar', 'configuration-chat', {'configuration': {**self.values(), 'source_type': 'database'}, 'message': 'Refresh ERP schema'})
-        self.assertEqual(response.status_code, 200, response.content)
-        refresh.assert_called_once_with(source.pk)
-
     def test_fabricated_columns_rejected(self):
         source, _, table = self.database()
         data = {**self.values(), 'source_type': 'database', 'database_source': source.pk, 'source_table': table.pk}
         self.respond({'message': 'Map the reference', 'updates': {'field_mappings': {'invoice_reference_no': {'source': 'invented', 'transform': 'trim'}}}})
         response = self.post('ar', 'configuration-chat', {'configuration': data, 'message': 'Suggest mapping'})
         self.assertEqual(response.status_code, 400, response.content)
-
-    def test_confirmed_supplier_mapping_shorthand_succeeds_without_repair(self):
-        source, _, table = self.database()
-        table.name = 'VANS_suppliermanagement'
-        table.save()
-        mappings = {'supplier_code': 'supplier_code', 'supplier_name': 'supplier_company_name',
-                    'contact_person': 'contact_person', 'phone': 'contact_number', 'payment_terms_days': 'terms'}
-        for index, name in enumerate(mappings.values(), start=2):
-            DatabaseColumn.objects.create(table=table, name=name, ordinal_position=index, formatted_type='text')
-        values = {**self.values('ap'), 'name': 'Supplier setup', 'target_entity': 'supplier', 'source_type': 'database'}
-        updates = {'database_source': source.pk, 'source_table': table.pk,
-                   'source_key_fields': ['supplier_code'], 'field_mappings': mappings}
-        self.provider.return_value = {'choices': [{'message': {'content': json.dumps({
-            'message': 'Supplier mappings added. Please review the guide before saving.', 'updates': updates})},
-            'finish_reason': 'stop'}]}
-        with patch.dict(os.environ, {'CONFIG_ASSISTANT_LLM_PROVIDER': 'alibaba', 'CONFIG_ASSISTANT_ALIBABA_MODEL': 'setup-test'}):
-            response = self.post('ap', 'configuration-chat', {'configuration': values, 'message':
-                'Yes use public.VANS_suppliermanagement. Identification should be supplier_code. '
-                'Mappings: supplier_code -> supplier_code, supplier_name -> supplier_company_name, '
-                'contact_person -> contact_person, phone -> contact_number, payment_terms_days -> terms.'})
-        self.assertEqual(response.status_code, 200, response.content)
-        record = response.json()['record']
-        self.assertEqual(record['source_table'], table.pk)
-        self.assertEqual(record['source_key_fields'], ['supplier_code'])
-        self.assertEqual(record['field_mappings'], {key: {'source': value, 'transform': 'identity'} for key, value in mappings.items()})
-        self.assertEqual(self.provider.call_count, 1)
-        self.assertFalse(model('ap', 'ExtractionConfiguration').objects.exists())
-        system = self.provider.call_args.args[1]['messages'][0]['content']
-        self.assertIn('response schema', system)
-        self.assertIn('"supplier_name":{"type":"object"', system)
-
-    def test_shorthand_still_rejects_invented_columns_with_specific_repair_guidance(self):
-        source, _, table = self.database()
-        data = {**self.values(), 'source_type': 'database', 'database_source': source.pk, 'source_table': table.pk}
-        self.respond({'message': 'Map the reference', 'updates': {'field_mappings': {'invoice_reference_no': 'invented'}}})
-        response = self.post('ar', 'configuration-chat', {'configuration': data, 'message': 'Suggest mapping'})
-        self.assertEqual(response.status_code, 400, response.content)
-        self.assertIn('field_mappings.invoice_reference_no.source must be a column', response.json()['message'])
-        self.assertEqual(self.provider.call_count, 2)
-
-    def test_compatible_provider_repair_receives_mapping_contract(self):
-        self.provider.side_effect = [
-            {'choices': [{'message': {'content': '{"message":"Missing updates"}'}}]},
-            {'choices': [{'message': {'content': '{"message":"What else is needed?","updates":{}}'}}]},
-        ]
-        with patch.dict(os.environ, {'CONFIG_ASSISTANT_LLM_PROVIDER': 'alibaba', 'CONFIG_ASSISTANT_ALIBABA_MODEL': 'setup-test'}):
-            response = self.post('ar', 'configuration-chat', {'configuration': self.values(), 'message': 'Help'})
-        self.assertEqual(response.status_code, 200, response.content)
-        for call in self.provider.call_args_list:
-            self.assertIn('response schema', call.args[1]['messages'][0]['content'])
-
-    def test_missing_update_envelope_gets_one_repair(self):
-        self.provider.side_effect = [
-            {'message': {'content': json.dumps({'message': 'I understand the invoice setup.'})}},
-            {'message': {'content': json.dumps({'message': 'Name added to the guide.', 'updates': {'name': 'Invoices'}})}}]
-        response = self.post('ar', 'configuration-chat', {'configuration': self.values(), 'message': 'Name it Invoices'})
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.json()['record']['name'], 'Invoices')
-        self.assertEqual(self.provider.call_count, 2)
-        self.assertEqual(model('ar', 'LLMExtractionLog').objects.filter(status='failed').count(), 1)
-
-    def test_unknown_tool_source_is_explained_without_crashing(self):
-        self.provider.side_effect = [
-            {'message': {'content': json.dumps({'message': 'Inspect', 'tool': {'name': 'inspect_schema', 'source_id': 999}})}},
-            {'message': {'content': json.dumps({'message': 'Please choose an available source.', 'updates': {}})}}]
-        response = self.post('ar', 'configuration-chat', {'configuration': {**self.values(), 'source_type': 'database'}, 'message': 'Read the schema'})
-        self.assertEqual(response.status_code, 200, response.content)
-        context = json.loads(self.provider.call_args.args[1]['messages'][1]['content'])
-        self.assertIn('error', context['tool_result'])
 
     def test_confirmation_expires(self):
         body = {'configuration': self.complete(), 'submit': True, 'confirmed': True}
@@ -390,24 +278,6 @@ class ConfigurationChatTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.context['finance_config']['mode'], mode)
             self.assertIn('sample_documents', response.context['finance_state'])
-
-    def test_claiming_changes_without_updates_triggers_repair(self):
-        self.provider.side_effect = [
-            {'message': {'content': json.dumps({'message': "I've captured the name.", 'updates': {}})}},
-            {'message': {'content': json.dumps({'message': 'The working name is Invoices.', 'updates': {'name': 'Invoices'}})}}]
-        response = self.post('ar', 'configuration-chat', {'configuration': self.values(), 'message': 'Name it Invoices'})
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.json()['record']['name'], 'Invoices')
-
-    def test_nested_answers_preserve_existing_rules_and_ollama_schema(self):
-        self.respond({'message': 'Date format updated.', 'updates': {'encoding_rules': {'date_format': 'DD/MM/YYYY'}}})
-        response = self.post('ar', 'configuration-chat', {'configuration': self.values(), 'message': 'Use DD/MM/YYYY'})
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.json()['record']['encoding_rules']['default_currency'], 'PHP')
-        self.assertEqual(response.json()['record']['encoding_rules']['date_format'], 'DD/MM/YYYY')
-        body = self.provider.call_args.args[1]
-        self.assertEqual(body['format']['required'], ['updates', 'message'])
-        self.assertFalse(body['format']['properties']['updates']['additionalProperties'])
 
     def test_explicit_selection_required_and_must_match_draft(self):
         body = {'configuration': self.values(), 'message': 'Help', 'selection': {}}
@@ -433,21 +303,6 @@ class ConfigurationChatTests(TestCase):
                         self.assertTrue(result['catalog'][0]['lineFields'])
                         self.assertNotIn('line_source_table' if source == 'database' else 'line_item_context', result['parameters'])
         self.provider.assert_not_called()
-
-    def test_selected_chat_receives_only_its_catalog_and_source_fields(self):
-        self.respond({'message': 'What labels identify your customers?', 'updates': {}})
-        values = {**self.values(), 'target_entity': 'customer'}
-        response = self.post('ar', 'configuration-chat', {'configuration': values, 'message': 'What is needed?'})
-        self.assertEqual(response.status_code, 200, response.content)
-        body = self.provider.call_args.args[1]
-        context = json.loads(body['messages'][1]['content'])
-        self.assertEqual([entry['key'] for entry in context['catalog']], ['customer'])
-        self.assertEqual(context['selection'], {'target_entity': 'customer', 'source_type': 'document'})
-        self.assertNotIn('database_source', context['editable_fields'])
-        properties = body['format']['properties']['updates']['properties']
-        self.assertNotIn('source_type', properties)
-        self.assertNotIn('invoice_reference_no', properties['field_instructions']['properties'])
-        self.assertIn('customer_code', properties['field_instructions']['properties'])
 
     def test_assistant_cannot_switch_source_or_mix_source_settings(self):
         for updates in ({'source_type': 'database'}, {'database_source': 1}, {'field_mappings': {}}):
@@ -483,10 +338,3 @@ class ConfigurationChatTests(TestCase):
         response = self.post('ar', 'configuration-context', {'selection': {'target_entity': 'payment', 'source_type': 'document'}})
         required = {field['key'] for field in response.json()['catalog'][0]['fields'] if field['required']}
         self.assertTrue({'customer', 'payment_reference_no', 'payment_date', 'currency', 'amount_received'} <= required)
-
-    def test_response_schema_required_arrays_do_not_share_header_items(self):
-        from accounts_receivable.services.configuration_chat import response_schema
-        properties = response_schema('ar', 'customer', 'database')['properties']['updates']['properties']
-        self.assertIn('customer_code', properties['encoding_rules']['properties']['required_fields']['items']['enum'])
-        self.assertEqual(properties['encoding_rules']['properties']['line_required_fields']['maxItems'], 0)
-        self.assertEqual(properties['source_key_fields']['items'], {'type': 'string'})

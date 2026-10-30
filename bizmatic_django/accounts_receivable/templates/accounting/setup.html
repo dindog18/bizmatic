@@ -3,7 +3,7 @@
 {% block workspace_title %}Extraction setup · {{ workspace_name }}{% endblock %}
 {% block extra_styles %}
 <link rel="stylesheet" href="{% static 'accounting/workspace.css' %}?v=concept-c-1">
-<link rel="stylesheet" href="{% static 'accounting/setup/layout.css' %}?v=concept-c-1">
+<link rel="stylesheet" href="{% static 'accounting/setup/layout.css' %}?v=setup-chat-1">
 <link rel="stylesheet" href="{% static 'accounting/setup/database.css' %}?v=review-spacing-1">
 <link rel="stylesheet" href="{% static 'accounting/setup/documents.css' %}?v=exception-checkbox-1">
 
@@ -19,11 +19,12 @@
 {% endblock %}
 {% block workspace_footer %}<span>Bizmatic · {{ workspace_name }}</span><span>Record first · Review before saving</span>{% endblock %}
 {% block scripts %}
-<script src="{% static 'accounting/api.js' %}?v=http-errors-1" defer></script><script src="{% static 'accounting/configuration-delete.js' %}?v=delete-2" defer></script>
+<script src="{% static 'accounting/api.js' %}?v=setup-chat-1" defer></script><script src="{% static 'accounting/configuration-delete.js' %}?v=delete-2" defer></script>
 <script src="{% static 'accounting/setup/annotations.js' %}?v=record-first-2" defer></script>
 <script src="{% static 'accounting/setup/query-state.js' %}?v=full-migration-1" defer></script>
 <script src="{% static 'accounting/setup/document-progress.js' %}?v=1" defer></script>
-<script src="{% static 'accounting/setup/documents.js' %}?v=resume-1" defer></script>
+<script src="{% static 'accounting/setup/chat.js' %}?v=setup-chat-1" defer></script>
+<script src="{% static 'accounting/setup/documents.js' %}?v=setup-chat-1" defer></script>
 <script src="{% static 'accounting/setup/power-query.js' %}?v=power-query-2" defer></script>
-<script src="{% static 'accounting/setup/workspace.js' %}?v=resume-2" defer></script>
+<script src="{% static 'accounting/setup/workspace.js' %}?v=setup-chat-1" defer></script>
 {% endblock %}

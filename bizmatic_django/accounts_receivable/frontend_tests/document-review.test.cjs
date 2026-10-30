@@ -4,16 +4,13 @@ const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
 
-test('assistant rule updates can be tested directly and results with issues can be reviewed',async()=>{
+test('manual rule updates can be tested directly and results with issues can be reviewed',async()=>{
   const handlers={};
   const root={innerHTML:'',contains:()=>false,querySelector:()=>null,
     addEventListener:(name,handler)=>{handlers[name]=handler;}};
   let receipt=false,tests=0;
-  const rules={'header:customer':{method:'instruction',instruction:'Use the buyer code'}};
-  const api={changed:()=>{receipt=false;},hasReceipt:()=>receipt,error:error=>{throw error;},
-    chat:async()=>({changed:true,message:'Corrected the buyer rule.',record:{setup_data:{document:{
-      rules:{'header:customer':{method:'instruction',instruction:'Map the buyer name to the account code'}},
-      prompt:'Extract the buyer.',instructions:''}}}}),
+  const rules={'header:customer':{method:'instruction',instruction:'Map the buyer name to the account code'}};
+  const api={mountChat(){},changed:()=>{receipt=false;},hasReceipt:()=>receipt,error:error=>{throw error;},
     testDocument:async(state)=>{tests++;assert.match(state.rules['header:customer'].instruction,/account code/);receipt=true;
       return {passed:false,rows:[],issues:['Customer needs review'],record:{},lines:[]};}};
   const window={ConfigurationDocumentEngine:{}};
@@ -21,9 +18,7 @@ test('assistant rule updates can be tested directly and results with issues can 
     {window,document:{activeElement:null},structuredClone});
   window.RecordSetupDocuments.mount(root,{api,documents:[],destination:{fields:[{key:'customer',label:'Customer',required:true}],lineFields:[]},
     state:{step:3,locked:true,text:'Buyer: Demo',prompt:'Extract the buyer.',rules,question:'Fix the buyer rule'}});
-  // A chat correction must not disable the mapping test or demand regeneration.
-  handlers.submit({target:{id:'da-help-form'},preventDefault(){}});
-  await new Promise(resolve=>setImmediate(resolve));
+  // Manual rules can be tested without regenerating an existing prompt.
   assert.match(root.innerHTML,/data-da='test' >Run mapping test|Run mapping test<\/button>/);
   assert.doesNotMatch(root.innerHTML,/data-da='test' disabled/);
   assert.doesNotMatch(root.innerHTML,/Rebuild the prompt before testing/);
@@ -42,7 +37,7 @@ for (const previousTest of ['missing', 'recheck failed', 'recheck passed']) {
     let receipt=true,rechecks=0,tests=0,finishTest;
     const result={passed:true,issues:[],rows:[{key:'header:customer',label:'Customer',value:'BUYER',
       expected:'Buyer',required:true,status:'passed'}],record:{customer:'BUYER'},lines:[]};
-    const api={changed:()=>{receipt=false;},hasReceipt:()=>receipt,error:error=>errors.push(error),
+    const api={mountChat(){},changed:()=>{receipt=false;},hasReceipt:()=>receipt,error:error=>errors.push(error),
       acceptRecheck:token=>{assert.equal(token,'rechecked');receipt=true;},
       recheckDocument:async()=>{
         rechecks++;

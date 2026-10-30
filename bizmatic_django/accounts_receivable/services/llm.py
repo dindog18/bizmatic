@@ -1,4 +1,4 @@
-"""One accounting LLM call, with the exact request, response, and failure saved."""
+"""Accounting LLM calls; private conversations keep only audit metadata."""
 
 import json
 import re
@@ -15,14 +15,14 @@ from .catalog import MODULES, model
 from .configuration import snapshot
 
 
-def run(mode, configuration, purpose, system, context, route=None, response_schema=None):
+def run(mode, configuration, purpose, system, context, route=None, response_schema=None, *, private_context=False):
     # Assistant proposals share one provider; record extraction uses the module provider.
     prefix = "CONFIG_ASSISTANT" if purpose == "configuration" else MODULES[mode].upper()
     provider = get_env(f"{prefix}_LLM_PROVIDER", "ollama").strip().lower()
     name = get_env(f"{prefix}_{provider.upper()}_MODEL", "").strip()
     log = model(mode, "LLMExtractionLog").objects.create(
         configuration=configuration if configuration.pk else None, configuration_revision=configuration.revision,
-        configuration_snapshot=snapshot(configuration), target_entity=configuration.target_entity,
+        configuration_snapshot={} if private_context else snapshot(configuration), target_entity=configuration.target_entity,
         source_type=configuration.source_type, purpose=purpose, provider=provider, model_name=name,
         status="processing", routing_route=route,
         fk_document_no=route.routing_log.source_document if route else None,
@@ -61,15 +61,19 @@ def run(mode, configuration, purpose, system, context, route=None, response_sche
             if thinking not in {"true", "false"}:
                 raise ValueError(f"{prefix}_ALIBABA_ENABLE_THINKING must be true or false.")
             body["enable_thinking"] = thinking == "true"
-        log.request_payload = body
+        # Personal setup conversations must not be copied into shared activity.
+        # Keep the log object redacted too: callers may save it again after validation.
+        redacted = {"content_redacted": True, "reason": "Private setup conversation"}
+        log.request_payload = redacted if private_context else body
         log.save(update_fields=["request_payload", "updated_at"])
         if provider not in {"openai", "anthropic", "google", "ollama", "alibaba", "deepseek"} or not name:
             raise ValueError(f"Configure {prefix}_LLM_PROVIDER and its provider model.")
         result = async_to_sync(invoke_with_llm)(provider, body, config_prefix=prefix, timeout=timeout)
-        log.response_payload = result if isinstance(result, dict) else {"invalid_response": result}
+        log.response_payload = redacted if private_context else result if isinstance(result, dict) else {"invalid_response": result}
         if not isinstance(result, dict):
             raise ValueError("The accounting provider response must be a JSON object.")
-        log.markdown_text = response_text(provider, result)
+        content_text = response_text(provider, result)
+        log.markdown_text = "" if private_context else content_text
         if (result.get("stop_reason") == "max_tokens" or result.get("done_reason") == "length"
                 or any(row.get("finish_reason") == "length" for row in result.get("choices", []))
                 or any(row.get("finishReason") == "MAX_TOKENS" for row in result.get("candidates", []))):
@@ -78,7 +82,7 @@ def run(mode, configuration, purpose, system, context, route=None, response_sche
                 f"Increase {prefix}_MAX_OUTPUT_TOKENS, restart the application, and retry. "
                 "Reasoning tokens also consume the output budget on thinking models."
             )
-        raw = log.markdown_text.strip()
+        raw = content_text.strip()
         fenced = re.fullmatch(r"```(?:json)?\s*([\s\S]*?)\s*```", raw)
         parsed = json.loads(fenced.group(1) if fenced else raw)
         if not isinstance(parsed, dict):
@@ -87,7 +91,9 @@ def run(mode, configuration, purpose, system, context, route=None, response_sche
         log.status = "processing"
     except Exception as error:
         log.status = "failed"
-        log.error_message = str(error) if isinstance(error, (ValueError, ValidationError)) else "The accounting provider request failed. Check the provider settings and retry."
+        log.error_message = ("The setup assistant request failed. Check provider settings, input size and timeout, then retry."
+                             if private_context else str(error) if isinstance(error, (ValueError, ValidationError))
+                             else "The accounting provider request failed. Check the provider settings and retry.")
         parsed = None
     finally:
         for key, value in usage(result).items():
