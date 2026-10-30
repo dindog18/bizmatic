@@ -33,6 +33,9 @@ class ConfigurationChatTests(TestCase):
         self.provider.return_value = {'message': {'content': json.dumps(result)}}
 
     def post(self, mode, action, body, record_id=None):
+        browser = self.client
+        if 'csrftoken' not in browser.cookies:
+            browser.get('/accounts-payable/configuration/new/?target=supplier&source=document')
         if action == 'configuration-chat' and 'selection' not in body:
             body = {**body, 'selection': {key: body['configuration'][key] for key in ('target_entity', 'source_type')}}
         if action == 'configuration-chat':

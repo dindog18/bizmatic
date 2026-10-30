@@ -1,5 +1,7 @@
 """Persist advice-only conversations independently of extraction configurations."""
-from uuid import uuid4
+from django.conf import settings
+from django.middleware.csrf import get_token
+from django.utils.crypto import salted_hmac
 
 from django.core.exceptions import ValidationError
 from django.db.models import F
@@ -33,10 +35,13 @@ def scope(request, mode, data):
     if request.user.is_authenticated:
         owner = f'user:{request.user.pk}'
     else:
-        # Anonymous installations keep conversations private to the browser session.
-        if 'setup_chat_owner' not in request.session:
-            request.session['setup_chat_owner'] = uuid4().hex
-        owner = 'session:' + request.session['setup_chat_owner']
+        # The setup page establishes the CSRF cookie before background requests.
+        # Derive ownership from that stable browser secret, not per-request session
+        # writes which can race when multiple tabs first load together.
+        if not request.COOKIES.get(settings.CSRF_COOKIE_NAME):
+            raise ValidationError('Open or reload the setup page before starting this conversation.')
+        get_token(request)
+        owner = 'browser:' + salted_hmac('setup-chat-owner', request.META['CSRF_COOKIE']).hexdigest()
     return {'owner': owner, 'workspace': mode, **{key: selection[key] for key in ('target_entity', 'source_type')}}
 
 

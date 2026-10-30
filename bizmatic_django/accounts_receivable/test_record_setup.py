@@ -28,6 +28,9 @@ class RecordSetupTests(TestCase):
         self.provider.return_value = {'message': {'content': json.dumps(result)}}
 
     def post(self, mode, action, data, record_id=None):
+        browser = self.client
+        if 'csrftoken' not in browser.cookies:
+            browser.get('/accounts-payable/configuration/new/?target=supplier&source=document')
         if action == 'setup-chat':
             selection = {key: data['configuration'][key] for key in ('target_entity', 'source_type')}
             history = self.post(mode, 'setup-chat-history', {'selection': selection}).json()

@@ -20,6 +20,9 @@ class SetupChatTests(TestCase):
         provider.start(); self.addCleanup(provider.stop)
 
     def post(self, action, body, mode='ap', client=None, record_id=None):
+        browser = client or self.client
+        if 'csrftoken' not in browser.cookies:
+            browser.get('/accounts-payable/configuration/new/?target=supplier&source=document')
         slug = 'accounts-payable' if mode == 'ap' else 'accounts-receivable'
         return (client or self.client).post(f'/{slug}/api/{action}/' + (f'{record_id}/' if record_id else ''), body, content_type='application/json')
 
@@ -184,3 +187,25 @@ class SetupChatTests(TestCase):
         response = self.post('setup-chat', self.body(self.values()))
         self.assertEqual(response.status_code, 400, response.content)
         self.assertNotContains(Client().get('/accounts-payable/llm-logs/'), marker)
+
+    def test_concurrent_first_requests_share_owner_without_session_writes(self):
+        from django.test import RequestFactory
+        from django.contrib.auth.models import AnonymousUser
+        from accounts_receivable.services.setup.chat import scope
+        self.client.get('/accounts-payable/configuration/new/')
+        cookie = self.client.cookies['csrftoken'].value
+        owners = []
+        for _ in range(2):
+            request = RequestFactory().post('/', HTTP_COOKIE='csrftoken=' + cookie)
+            from django.middleware.csrf import CsrfViewMiddleware
+            CsrfViewMiddleware(lambda request: None).process_request(request)
+            request.user = AnonymousUser()
+            request.session = {}
+            owners.append(scope(request, 'ap', self.body(self.values()))['owner'])
+            self.assertEqual(request.session, {})
+        self.assertEqual(owners[0], owners[1])
+
+    def test_unbootstrapped_anonymous_request_is_rejected(self):
+        response = Client().post('/accounts-payable/api/setup-chat-history/',
+            {'selection': self.body(self.values())['selection']}, content_type='application/json')
+        self.assertEqual(response.status_code, 400)
