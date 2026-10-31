@@ -54,8 +54,9 @@ class RoutingFrontendTests(TestCase):
         from .services.catalog import destination_catalog
 
         catalog = destination_catalog()
-        self.assertEqual([module["value"] for module in catalog], ["accounts_payable", "accounts_receivable"])
-        for module, mode in zip(catalog, ("ap", "ar")):
+        self.assertEqual([module["value"] for module in catalog], ["encoder", "accounts_payable", "accounts_receivable"])
+        self.assertEqual(catalog[0]["targets"], [{"value": "EncoderJob", "label": "Encoder job"}])
+        for module, mode in zip(catalog[1:], ("ap", "ar")):
             self.assertEqual([target["value"] for target in module["targets"]],
                              [target["model"] for target in configuration_catalog(mode)])
         response = self.client.get(reverse("ROUTER:destination_create"))
@@ -70,7 +71,7 @@ class RoutingFrontendTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(RoutingDestination.objects.exists())
 
-    def test_all_ten_accounting_target_choices_can_be_saved(self):
+    def test_all_accounting_and_encoder_target_choices_can_be_saved(self):
         from .services.catalog import destination_catalog
 
         url = reverse("ROUTER:configuration_save", args=["destinations"])
@@ -78,7 +79,7 @@ class RoutingFrontendTests(TestCase):
             for target in module["targets"]:
                 response = self.client.post(url, {"name": target["label"], "module_name": module["value"], "target_model": target["value"], "is_active": True}, content_type="application/json")
                 self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(RoutingDestination.objects.count(), 10)
+        self.assertEqual(RoutingDestination.objects.count(), 11)
 
     def test_saved_legacy_destination_can_keep_its_identity(self):
         legacy = RoutingDestination.objects.create(name="Legacy source", module_name="document_extraction", target_model="Document")

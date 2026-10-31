@@ -1,13 +1,18 @@
-"""Read-only setup checklist and page help for the five workspaces."""
+"""Workspace setup checks, reminder preferences and context-specific page help."""
 
 from django.apps import apps
+from django.conf import settings
+from django.contrib import messages
+from django.db import transaction, IntegrityError
+from django.http import HttpResponseBadRequest
+from document_extraction.models import WorkspaceSetupPreferences, SETUP_MODULES, default_setup_modules
 from django.core.exceptions import ImproperlyConfigured
 
 from db_extraction.credentials import credential_cipher
 from accounts_receivable.services.catalog import TARGETS
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.urls import reverse
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 from .environment import get_env
 from .page_help import for_page
@@ -56,17 +61,20 @@ def provider_check(prefix):
     return not missing, "Fill in: " + ", ".join(missing) + ". Restart Django after editing .env." if missing else "Required settings are present. Provider availability is checked when you run extraction."
 
 
-def checklist():
+def checklist(active_modules=None):
     groups = []
+    if active_modules is None:
+        preference = WorkspaceSetupPreferences.objects.filter(pk=1).first()
+        active_modules = preference.active_modules if preference else default_setup_modules()
 
     def group(key, title, description):
         value = {"key": key, "title": title, "description": description, "steps": []}
         groups.append(value)
         return value
 
-    def step(group, title, ready, detail, route, label):
+    def step(group, title, ready, detail, route, label, optional=False):
         group["steps"].append({"title": title, "ready": ready, "detail": detail,
-                               "url": reverse(route), "label": label})
+                               "url": reverse(route), "label": label, "optional": optional})
 
     doc = group("DOC_EXTRACTION", "Document extraction", "Upload files, extract text, and approve the result before routing.")
     ready, detail = provider_check("DOC_EXTRACTION")
@@ -92,7 +100,7 @@ def checklist():
             target = targets.get(destination.target_model)
             ready = bool(target) and configs.filter(source_type="document", target_entity=target).exists()
             step(accounting, "Document profile: " + destination.name, ready, "Submit a document configuration for this target. If several profiles match, choose one during route review. Account-specific profiles require a matching account.", namespace + ":configuration_list", "Review configurations")
-    assistant = group("CONFIG_ASSISTANT", "Configuration assistant", "A shared LLM builds and tests Record First document prompts and assists AP/AR query mapping. Review and confirm configurations before activation.")
+    assistant = group("CONFIG_ASSISTANT", "Configuration assistant", "A shared LLM builds and tests Record First document prompts and assists AP/AR query mapping and Encoder troubleshooting. Review and confirm configurations before activation.")
     ready, detail = provider_check("CONFIG_ASSISTANT")
     step(assistant, "Configure the assistant LLM", ready, detail, "ACCOUNTS_PAYABLE:configuration_list", "Open extraction setup")
     database = group("DB_EXTRACTION", "Database extraction (optional)", "Only needed when importing from PostgreSQL. Document routing works without it.")
@@ -108,26 +116,65 @@ def checklist():
     step(database, "Add an enabled connection", sources.exists(), "Enter host, port, database, username, password and SSL settings. Test the connection before refreshing metadata.", "DB_EXTRACTION:source_create", "Add connection")
     ready = apps.get_model("db_extraction", "ExtractionRun").objects.filter(source__enabled=True, status="completed").exists()
     step(database, "Refresh schema metadata", ready, "Open a connection and refresh metadata. Then select its tables and map fields in an AP or AR database configuration. Submit that configuration before importing.", "DB_EXTRACTION:source_list", "Open connections")
-    for item in groups:
-        item["missing"] = sum(not row["ready"] for row in item["steps"])
+    encoder = group("ENCODER", "Encoder", "Prepare routed document payloads for approved MCP tools, then review and confirm every external execution.")
+    step(encoder, "Enable local Encoder access", settings.ENCODER_LOCAL_ENABLED,
+         "Set ENCODER_LOCAL_ENABLED=true and use a trusted loopback development server. Module activation here controls reminders; it does not override the local access restriction.", "ENCODER:dashboard", "Open Encoder")
+    connections = apps.get_model("encoder", "MCPConnection").objects.filter(enabled=True).defer("environment", "http_headers")
+    step(encoder, "Test and save an MCP connection", connections.filter(discovered_at__isnull=False, discovery_error="").exists(),
+         "Choose STDIO or Streamable HTTP and enter its server details. Test and save discovers tools without calling business operations.", "ENCODER:connection_create", "Add MCP connection")
+    permitted = any(set(row.approved_tools) & {tool["name"] for tool in row.tools} for row in connections)
+    step(encoder, "Permit encoding operations", permitted, "Inspect discovered tool schemas and permit only intended encoding operations. Each execution still requires a separate payload confirmation.", "ENCODER:connections", "Review MCP tools")
+    step(encoder, "Prepare encrypted secret storage (if needed)", key_ready,
+         "Uses the same init_db_credential_key command as Database Connections. Needed only when saving secret environment variables or HTTP headers.", "ENCODER:connections", "Open connections", optional=True)
+    ready, detail = provider_check("CONFIG_ASSISTANT")
+    step(encoder, "Configure mapping and troubleshooting AI", ready, detail + " Encoder shares CONFIG_ASSISTANT_* settings.", "ENCODER:dashboard", "Open Encoder")
+    encoder_destinations = destinations.filter(module_name="encoder", target_model="EncoderJob")
+    step(encoder, "Route documents to Encoder", encoder_destinations.filter(rules__is_active=True).exists(),
+         "Add an Encoder job destination and active rule in Router. Routing creates a draft; approve the current document and route, map fields, then explicitly confirm execution.", "ROUTER:destinations", "Review destinations")
+    for position, item in enumerate(groups):
+        item["position"] = position
+        item["active"] = item["key"] in active_modules
+        item["missing"] = sum(not row["ready"] and not row["optional"] for row in item["steps"])
     return groups
 
 
 
 def workspace_guidance(request):
     match = request.resolver_match
-    namespaces = {"DOC_EXTRACTION", "DB_EXTRACTION", "ROUTER", "ACCOUNTS_PAYABLE", "ACCOUNTS_RECEIVABLE"}
+    namespaces = {"DOC_EXTRACTION", "DB_EXTRACTION", "ROUTER", "ACCOUNTS_PAYABLE", "ACCOUNTS_RECEIVABLE", "ENCODER"}
     if not match or (match.namespace not in namespaces and match.url_name != "setup"):
         return {}
     if "/api/" in request.path:
         return {}
-    groups = checklist()
+    preference = WorkspaceSetupPreferences.objects.filter(pk=1).first()
+    groups = checklist(preference.active_modules if preference else default_setup_modules())
     current = next((group for group in groups if group["key"] == match.namespace), None)
     help_content = for_page(request)
-    return {"setup_groups": groups, "setup_missing": sum(group["missing"] for group in groups if group["key"] != "DB_EXTRACTION"),
-            "setup_current": current, "page_help_title": help_content["title"], "page_guide": help_content}
+    return {"setup_groups": groups, "setup_columns": [groups[::2], groups[1::2]], "setup_missing": sum(group["missing"] for group in groups if group["active"]),
+            "setup_current": current if current and current["active"] else None,
+            "setup_preferences_revision": preference.updated_at.isoformat() if preference else "", "page_help_title": help_content["title"], "page_guide": help_content}
 
 
 @require_GET
 def setup(request):
     return render(request, "document_extraction/setup.html", {"page_title": "Application setup", "section": "setup"})
+
+
+@require_POST
+def save_modules(request):
+    selected = request.POST.getlist("active_modules")
+    if set(selected) - set(SETUP_MODULES):
+        return HttpResponseBadRequest("Choose only the listed modules.")
+    try:
+        with transaction.atomic():
+            preference = WorkspaceSetupPreferences.objects.select_for_update().filter(pk=1).first()
+            if request.POST.get("revision", "") != (preference.updated_at.isoformat() if preference else ""):
+                messages.error(request, "Module selection changed. Review the current selection and save again.")
+            else:
+                preference = preference or WorkspaceSetupPreferences(pk=1)
+                preference.active_modules = list(dict.fromkeys(selected))
+                preference.save()
+                messages.success(request, "Module selection saved. Setup reminders now include only active modules.")
+    except IntegrityError:
+        messages.error(request, "Module selection changed. Reload and try again.")
+    return redirect("setup")

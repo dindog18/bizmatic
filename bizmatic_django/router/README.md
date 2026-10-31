@@ -9,6 +9,17 @@ retained in `route.routing_log.input_text`.
 `services/handoff.py` saves per-route processing status, errors, and completion;
 completed routes are not processed twice. See the [accounting guide](../accounts_receivable/README.md).
 
+Encoder rules additionally select an enabled MCP connection and permitted operation.
+Routing snapshots these settings and passes the matched rule's operation to Encoder.
+The handoff prepares mappings, validates a local draft and, when values are missing,
+starts contextual AI preparation/troubleshooting with persisted LLM usage. The job
+workspace shows the routed operation without asking for it again. External MCP
+execution still requires source/route approval and explicit payload confirmation.
+Legacy rules without a selected operation retain manual drafts until edited/saved.
+If several Encoder rules use different operations, the LLM must return the matching
+`rule_no` as `rule_id`; unknown IDs fail validation and ambiguous selections stop
+for review. AP/AR handoff behavior is unchanged.
+
 ## Run
 
 1. Apply schema changes with `python manage.py migrate router`.
@@ -93,3 +104,15 @@ Destination choices cover Supplier/Customer, purchase orders, delivery receipts,
 sales invoices, and payments. Changing the module clears the target selection.
 Existing destinations outside the current catalog retain their saved identity
 when edited; add new supported modules in `services/catalog.py` as they become ready.
+
+## Delete routing configuration
+
+Delete opens a confirmation naming the destination or rule. For destinations,
+the warning explicitly states that ALL associated routing rules will also be
+deleted. Confirmation removes the destination and rules together in one
+transaction. It is a CSRF-protected POST and checks the current record revision.
+
+Past rule snapshots, routes, source documents and AP/AR or Encoder records are
+retained. Deleted destinations are kept as inactive historical references, hidden
+from configuration, and cannot be re-enabled or edited through the UI. A new
+destination for the same module/model may be created with a fresh identity.

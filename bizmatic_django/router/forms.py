@@ -54,6 +54,24 @@ class DestinationForm(forms.ModelForm):
 
 
 class RuleForm(forms.ModelForm):
+    def clean(self):
+        data = super().clean()
+        destination = data.get("destination")
+        if destination and destination.module_name == "encoder":
+            from encoder.services.discovery import tool
+            connection = data.get("encoder_connection")
+            if not connection or not data.get("encoder_tool"):
+                raise forms.ValidationError("Choose an MCP connection and permitted operation for this Encoder rule.")
+            tool(connection, data["encoder_tool"])
+        else:
+            data["encoder_connection"], data["encoder_tool"] = None, ""
+        return data
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["destination"].queryset = RoutingDestination.objects.filter(is_deleted=False)
+        self.fields["encoder_connection"].queryset = self.fields["encoder_connection"].queryset.filter(enabled=True).defer("environment", "http_headers")
+
     class Meta:
         model = RoutingRule
-        fields = ["name", "destination", "document_type", "instructions", "examples", "is_active"]
+        fields = ["name", "destination", "document_type", "instructions", "examples", "is_active", "encoder_connection", "encoder_tool"]

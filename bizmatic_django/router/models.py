@@ -22,6 +22,7 @@ class ReviewStatus(models.TextChoices):
 class RoutingDestination(models.Model):
     """One possible destination, such as an AP supplier sales invoice."""
 
+    is_deleted = models.BooleanField(default=False, editable=False)
     destination_no = models.AutoField(primary_key=True)
     name = models.CharField(max_length=160)
     module_name = models.CharField(
@@ -39,7 +40,7 @@ class RoutingDestination(models.Model):
         ordering = ["module_name", "name"]
         constraints = [
             models.UniqueConstraint(
-                fields=["module_name", "target_model"], name="router_destination_uq",
+                fields=["module_name", "target_model"], condition=models.Q(is_deleted=False), name="router_destination_uq",
             ),
         ]
 
@@ -54,6 +55,8 @@ class RoutingRule(models.Model):
     different modules. A rule describes a match; it does not stop other matches.
     """
 
+    encoder_connection = models.ForeignKey("encoder.MCPConnection", null=True, blank=True, on_delete=models.PROTECT)
+    encoder_tool = models.CharField(max_length=200, blank=True)
     rule_no = models.AutoField(primary_key=True)
     name = models.CharField(max_length=160)
     destination = models.ForeignKey(
@@ -156,6 +159,7 @@ class DocumentRoute(models.Model):
     Approval of a pending or failed route also starts its accounting extraction.
     """
 
+    encoder_config = models.JSONField(default=dict, blank=True)
     route_no = models.AutoField(primary_key=True)
     routing_log = models.ForeignKey(
         LLMRoutingLog, on_delete=models.CASCADE, related_name="routes",

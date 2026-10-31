@@ -10,6 +10,7 @@ from django.apps import apps
 
 
 MODULES = (
+    ("encoder", "Encoder", ("EncoderJob",)),
     ("accounts_payable", "Accounts payable", (
         "Supplier", "CompanyPurchaseOrder", "SupplierDeliveryReceipt",
         "SupplierSalesInvoice", "CompanyPayment",

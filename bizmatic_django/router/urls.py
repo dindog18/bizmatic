@@ -9,6 +9,7 @@ urlpatterns = [
     path("api/configuration/<str:kind>/", views.configuration_save, name="configuration_save"),
     path("api/configuration/<str:kind>/<int:record_id>/", views.configuration_save, name="configuration_edit"),
     path("api/configuration/<str:kind>/<int:record_id>/toggle/", views.configuration_toggle, name="configuration_toggle"),
+    path("api/configuration/<str:kind>/<int:record_id>/delete/", views.configuration_delete, name="configuration_delete"),
     path("api/routes/<int:route_id>/review/", views.route_review, name="route_review"),
     path("api/logs/<int:log_id>/routes/", views.route_add, name="route_add"),
     path("api/logs/<int:log_id>/accuracy/", views.log_accuracy, name="log_accuracy"),

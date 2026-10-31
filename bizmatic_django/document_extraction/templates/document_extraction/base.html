@@ -44,6 +44,8 @@
             <ul class="navbar-nav flex-column mb-3">
               <li class="nav-item"><a class="nav-link {% if section == 'databases' %}active{% endif %}" {% if section == 'databases' %}aria-current="page"{% endif %} href="{% url 'DB_EXTRACTION:source_list' %}"><div class="d-flex align-items-center"><span class="nav-link-icon"><span class="fas fa-database" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Database connections</span></div></a></li>
             </ul>
+            <div class="navbar-vertical-label mt-3 mb-2 px-3">Encoding &amp; integrations</div>
+            <ul class="navbar-nav flex-column mb-3" aria-label="Encoding and integrations"><li class="nav-item"><a class="nav-link {% if section == 'encoder' %}active{% endif %}" {% if section == 'encoder' %}aria-current="page"{% endif %} href="{% url 'ENCODER:dashboard' %}"><span class="nav-link-icon"><span class="fas fa-paper-plane" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Encoder</span></a></li></ul>
             <div class="navbar-vertical-label mt-3 mb-2 px-3">Manage</div>
             <ul class="navbar-nav flex-column mb-3"><li class="nav-item"><a class="nav-link {% if section == 'setup' %}active{% endif %}" href="{% url 'setup' %}" {% if section == 'setup' %}aria-current="page"{% endif %}><span class="nav-link-icon"><span class="fas fa-sliders-h" aria-hidden="true"></span></span><span class="nav-link-text ps-1">Settings &amp; setup</span>{% if setup_missing %}<span class="biz-setup-count" aria-label="{{ setup_missing }} setup steps remaining">{{ setup_missing }}</span>{% endif %}</a></li></ul>
             <div class="biz-sidebar-footer">Business, in order.<span>Bizmatic workspace</span></div>

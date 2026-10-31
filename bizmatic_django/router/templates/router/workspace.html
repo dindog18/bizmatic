@@ -6,7 +6,7 @@
 {% block breadcrumbs %}<nav aria-label="Breadcrumb"><ol class="breadcrumb fs-10 mb-3"><li class="breadcrumb-item"><a href="{% url 'ROUTER:queue' %}">Router</a></li><li class="breadcrumb-item active" aria-current="page">{{ page_title }}</li></ol></nav>{% endblock %}
 {% block content %}
 <div id="router-app">
-  <div class="alert alert-info mb-4">Routing uses saved extraction text and active rules. Matched AP/AR destinations start extraction automatically. Retry a failed extraction here, or rerun routing to reassess the document.</div>
+  <div class="alert alert-info mb-4">Routing uses saved extraction text and active rules. Matched AP/AR destinations start extraction automatically. Encoder rules select the MCP operation and prepare validated drafts with AI troubleshooting; external MCP execution requires review and explicit confirmation. Retry a failed extraction here, or rerun routing to reassess the document.</div>
   <nav class="router-tabs mb-4" aria-label="Routing workspace">
     <a href="{% url 'ROUTER:queue' %}" data-screen="queue">Routing queue</a>
     <a href="{% url 'ROUTER:destinations' %}" data-screen="destinations">Destinations</a>
@@ -22,9 +22,9 @@
 {{ router_state|json_script:"router-state" }}
 {% endblock %}
 {% block scripts %}
-<script src="{% static 'router/state.js' %}" defer></script>
-<script src="{% static 'router/configuration.js' %}" defer></script>
-<script src="{% static 'router/review.js' %}" defer></script>
-<script src="{% static 'router/rerun.js' %}" defer></script>
-<script src="{% static 'router/workspace.js' %}" defer></script>
+<script src="{% static 'router/state.js' %}?v=routing-encoder-prep-6" defer></script>
+<script src="{% static 'router/configuration.js' %}?v=routing-encoder-prep-6" defer></script>
+<script src="{% static 'router/review.js' %}?v=routing-encoder-prep-6" defer></script>
+<script src="{% static 'router/rerun.js' %}?v=routing-encoder-prep-6" defer></script>
+<script src="{% static 'router/workspace.js' %}?v=routing-encoder-prep-6" defer></script>
 {% endblock %}

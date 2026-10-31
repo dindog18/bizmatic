@@ -55,3 +55,7 @@ typing_extensions==4.16.0
 urllib3==2.8.0
 websockets==16.1.1
 xlrd==2.0.2
+
+# Local Encoder MCP transport and schema validation
+mcp==1.30.0
+jsonschema[format]==4.26.0

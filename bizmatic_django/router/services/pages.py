@@ -10,13 +10,13 @@ from ..models import DocumentRoute, LLMRoutingLog, RoutingDestination, RoutingRu
 def destination(row):
     return {"id": row.pk, "name": row.name, "module_name": row.module_name,
             "target_model": row.target_model, "description": row.description,
-            "is_active": row.is_active, "revision": row.updated_at.isoformat()}
+            "is_active": row.is_active, "is_deleted": row.is_deleted, "revision": row.updated_at.isoformat()}
 
 
 def rule(row):
     return {"id": row.pk, "name": row.name, "destination_id": row.destination_id,
             "document_type": row.document_type, "instructions": row.instructions,
-            "examples": row.examples, "is_active": row.is_active, "revision": row.updated_at.isoformat()}
+            "examples": row.examples, "encoder_connection": row.encoder_connection_id, "encoder_tool": row.encoder_tool, "is_active": row.is_active, "revision": row.updated_at.isoformat()}
 
 
 def route(row):
@@ -25,6 +25,7 @@ def route(row):
     profiles = []
     record_url = ""
     history_url = ""
+    review_locked = row.processing_status in {"processing", "completed"}
     if mode:
         target = next((key for key, name in TARGETS[mode].items() if name == row.destination.target_model), None)
         base = "/accounts-receivable/" if mode == "ar" else "/accounts-payable/"
@@ -37,9 +38,17 @@ def route(row):
             resource = {"customer": "customers", "supplier": "suppliers", "purchase_order": "purchase-orders", "delivery_receipt": "delivery-receipts", "sales_invoice": "invoices", "payment": "payments"}.get(target)
             if record_id and resource:
                 record_url = base + f"{resource}/{record_id}/"
+    if row.destination.module_name == "encoder":
+        from django.urls import reverse
+        from encoder.models import EncoderJob
+        job = EncoderJob.objects.filter(route=row).first()
+        if job:
+            review_locked = job.status in {"processing", "completed"}
+            record_url = reverse("ENCODER:workspace", args=[job.pk])
+            history_url = record_url + "#execution-history"
     return {"id": row.pk, "log_id": row.routing_log_id, "destination_id": row.destination_id,
             "reason": row.reason, "confidence": float(row.confidence) if row.confidence is not None else None,
-            "review_status": row.review_status, "review_notes": row.review_notes,
+            "review_status": row.review_status, "review_notes": row.review_notes, "review_locked": review_locked,
             "processing_status": row.processing_status, "processing_error": row.processing_error,
             "profiles": profiles, "record_url": record_url, "history_url": history_url,
             "revision": row.updated_at.isoformat()}
@@ -80,8 +89,10 @@ def workspace_state(screen, record_id):
         documents = list(Document.objects.filter(pk__in=[row.source_document_id for row in attempts]))
     else:
         attempts = []
+    from encoder.models import MCPConnection
     return {
-        "destinations": [destination(row) for row in RoutingDestination.objects.all()],
+        "encoder_connections": [{"id": conn.pk, "name": conn.name, "tools": [{"name": tool["name"], "label": tool.get("title") or tool["name"]} for tool in conn.tools if tool["name"] in conn.approved_tools]} for conn in MCPConnection.objects.filter(enabled=True).defer("environment", "http_headers")],
+        "destinations": [destination(row) for row in (RoutingDestination.objects.filter(is_deleted=False) if screen in {"destinations", "destination_create", "destination_edit", "rules", "rule_create", "rule_edit"} else RoutingDestination.objects.all())],
         "rules": [rule(row) for row in RoutingRule.objects.all()],
         "documents": [{"id": doc.pk, "name": doc.file_name, "type": doc.document_type,
                        "party": f"Document #{doc.pk}", "batch": f"Batch #{doc.fk_batch_no_id}" if doc.fk_batch_no_id else "No batch",
