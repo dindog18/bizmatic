@@ -9,7 +9,7 @@
     url: (name, id) => id === undefined ? config.routes[name] : config.routes[name].replace("/0/", `/${Number(id)}/`),
   };
   ui.date = value => new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-  ui.moduleLabel = value => ({ accounts_payable: "Accounts payable", accounts_receivable: "Accounts receivable", inventory: "Inventory" })[value] || value.replace(/_/g, " ");
+  ui.moduleLabel = value => ({ encoder: "Encoder", accounts_payable: "Accounts payable", accounts_receivable: "Accounts receivable", inventory: "Inventory" })[value] || value.replace(/_/g, " ");
   ui.destination = id => ui.state.destinations.find(row => row.id === Number(id));
   ui.latestLog = docId => ui.state.logs.find(row => row.document_id === docId);
   ui.logRoutes = logId => ui.state.routes.filter(row => row.log_id === logId);

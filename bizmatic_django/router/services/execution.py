@@ -50,6 +50,7 @@ def select_text(document):
 def rule_snapshot():
     return [{"rule_no": rule.pk, "name": rule.name, "document_type": rule.document_type,
              "instructions": rule.instructions, "examples": rule.examples,
+             "encoder_connection": rule.encoder_connection_id, "encoder_tool": rule.encoder_tool,
              "destination_id": rule.destination_id, "destination_name": rule.destination.name,
              "module_name": rule.destination.module_name, "target_model": rule.destination.target_model,
              "description": rule.destination.description}
@@ -85,6 +86,8 @@ def _register(request: ExecutionRequest, config):
             raise ValidationError("A selected document is already being routed. Wait for that attempt to finish.")
         if DocumentRoute.objects.filter(routing_log__source_document_id__in=ids, processing_status="processing").exists():
             raise ValidationError("Wait for AP/AR extraction to finish before rerunning routing.")
+        if DocumentRoute.objects.filter(routing_log__source_document_id__in=ids, encoder_job__status="processing").exists():
+            raise ValidationError("Wait for Encoder execution to finish before rerunning routing.")
         rules = rule_snapshot()
         if not rules:
             raise ValidationError("Add an active routing destination and an active routing rule before running documents.")
@@ -107,13 +110,25 @@ def _register(request: ExecutionRequest, config):
         return logs, True
 
 
+def encoder_configuration(snapshot, destination_id, rule_id=None):
+    rules = [row for row in snapshot if row["destination_id"] == destination_id and row.get("module_name") == "encoder"
+             and (rule_id is None or row["rule_no"] == rule_id)]
+    presets = {(row.get("encoder_connection"), row.get("encoder_tool", "")) for row in rules}
+    if not presets:
+        return {}
+    if len(presets) != 1:
+        return {"error": "The router did not identify one matching Encoder rule. Review the rules and rerun routing to select its MCP operation."}
+    connection, tool = presets.pop()
+    return {"connection_id": connection, "tool_name": tool, "rule_id": rule_id} if connection or tool else {}
+
+
 def _save_result(log, result, parsed, error, duration):
     with transaction.atomic():
         # Only validated configured destination IDs reach this write.
         if parsed is not None:
             DocumentRoute.objects.bulk_create([
                 DocumentRoute(routing_log=log, destination_id=row.destination_id,
-                              reason=row.reason.strip(), confidence=row.confidence)
+                              reason=row.reason.strip(), confidence=row.confidence, encoder_config=encoder_configuration(log.rules_snapshot, row.destination_id, row.rule_id))
                 for row in parsed.routes
             ])
         log.response_payload = result
@@ -140,7 +155,7 @@ async def _run(logs, config):
         await sync_to_async(LLMRoutingLog.objects.filter(pk=log.pk).update)(status="processing", updated_at=timezone.now())
         try:
             result = await llm.invoke(config, log.request_payload)
-            parsed = llm.parse_response(config.provider, result, {row["destination_id"] for row in log.rules_snapshot})
+            parsed = llm.parse_response(config.provider, result, {row["destination_id"] for row in log.rules_snapshot}, log.rules_snapshot)
         except Exception as exc:
             error = f"Routing failed: {type(exc).__name__}: {str(exc)}"
             logger.warning("document=%s routing_log=%s failed type=%s", log.source_document_id, log.pk, type(exc).__name__)

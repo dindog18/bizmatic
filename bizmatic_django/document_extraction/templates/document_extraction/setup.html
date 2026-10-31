@@ -1,16 +1,30 @@
 {% extends 'document_extraction/base.html' %}
+{% load static %}
+{% block extra_styles %}<link rel="stylesheet" href="{% static 'document_extraction/setup.css' %}">{% endblock %}
 {% block workspace_title %}Application setup{% endblock %}
 {% block content %}
-<div class="page-heading mb-4"><h1 class="fs-6 mb-1">Settings &amp; setup</h1><p class="text-700 mb-0">Manage extraction, routing, and database connections. Review each workspace before processing records.</p></div>
-<div class="alert {% if setup_missing %}alert-warning{% else %}alert-success{% endif %}" role="status"><strong>{% if setup_missing %}{{ setup_missing }} setup step{{ setup_missing|pluralize }} need attention.{% else %}Required setup entries are present.{% endif %}</strong> Database setup is optional. These checks do not call external services or verify that a model is available.</div>
-<div class="card mb-4"><div class="card-body"><h2 class="fs-9 mb-3">Start with your document workflow</h2><p>Configure the document LLM → upload and review text → create routing destinations and rules → submit AP or AR extraction instructions → route documents → review destinations and approve processing.</p><details class="biz-settings-help mt-3"><summary>Provider configuration &amp; credentials</summary><p class="mt-3 mb-0 text-700">Environment settings are maintained in <code>bizmatic_django/.env</code>, following <code>.env.example</code>. Fill in your selected provider's model and credentials, then restart Django. Each accounting module has its own <code>ACCOUNTS_PAYABLE_*</code> or <code>ACCOUNTS_RECEIVABLE_*</code> settings. API keys are never shown on this page. Open Help on any workspace page for usage instructions.</p></details></div></div>
-<div class="biz-settings-grid">
-{% for group in setup_groups %}
-<section class="card mb-4" id="{{ group.key }}" style="scroll-margin-top: 5rem" aria-labelledby="heading-{{ group.key }}">
-  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2"><h2 class="fs-7 mb-0" id="heading-{{ group.key }}">{{ group.title }}</h2><span class="badge {% if group.missing %}bg-warning text-dark{% else %}bg-success{% endif %}">{% if group.missing %}{{ group.missing }} step{{ group.missing|pluralize }} remaining{% else %}Setup entries present{% endif %}</span></div>
-  <div class="card-body"><p class="text-700">{{ group.description }}</p>
-    <ul class="list-unstyled mb-0">{% for step in group.steps %}<li class="border-top py-3"><div class="biz-settings-step d-flex flex-wrap justify-content-between align-items-start gap-3"><div style="flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere"><div class="mb-2"><span class="badge {% if step.ready %}bg-success{% else %}bg-warning text-dark{% endif %} me-2">{% if step.ready %}Present{% else %}Needs setup{% endif %}</span><strong>{{ step.title }}</strong></div><p class="fs-10 text-700 mb-0">{{ step.detail }}</p></div><a class="btn btn-sm btn-outline-primary" href="{{ step.url }}">{{ step.label }}</a></div></li>{% endfor %}</ul>
-  </div>
-</section>{% endfor %}
+<div class="page-heading mb-4"><h1 class="fs-6 mb-1">Settings &amp; setup</h1><p class="text-700 mb-0">Manage extraction, routing, Encoder, and database connections. Review each workspace before processing records.</p></div>
+<div class="alert {% if setup_missing %}alert-warning{% else %}alert-success{% endif %}" role="status"><strong>{% if setup_missing %}{{ setup_missing }} setup step{{ setup_missing|pluralize }} need attention.{% else %}No active module needs setup.{% endif %}</strong> Only active modules contribute to reminders. These checks do not call external services or verify that a model is available.</div>
+<form method="post" action="{% url 'setup_modules' %}" class="card mb-4" id="module-selection">{% csrf_token %}
+  <div class="card-header"><h2 class="fs-9 mb-0">Activate the modules you want to use</h2></div>
+  <div class="card-body"><p>Choose which modules contribute to setup reminders across this Bizmatic workspace. Inactive modules remain accessible; their records, routing and processing are unchanged.</p>
+    <input type="hidden" name="revision" value="{{ setup_preferences_revision }}">
+    <div class="setup-module-options">{% for group in setup_groups %}
+      <label class="setup-module-option" for="activate-{{ group.key }}">
+        <span class="setup-module-name">{{ group.title }}</span>
+        <input class="setup-module-input" type="checkbox" role="switch" name="active_modules" value="{{ group.key }}" id="activate-{{ group.key }}" {% if group.active %}checked{% endif %}>
+        <span class="setup-module-toggle" aria-hidden="true"></span>
+        <span class="setup-module-state" aria-hidden="true"><span class="setup-module-on">On</span><span class="setup-module-off">Off</span></span>
+      </label>
+    {% endfor %}</div>
+  </div><div class="card-footer"><button class="btn btn-primary" type="submit">Save module selection</button></div>
+</form>
+<div class="card mb-4"><div class="card-body"><h2 class="fs-9 mb-3">Start with your document workflow</h2><p>Configure the document LLM → upload and review text → create routing destinations and rules → prepare AP/AR extraction instructions or an Encoder MCP connection → route documents → review destinations and results. Encoder sends data externally only after payload confirmation.</p><details class="biz-settings-help mt-3"><summary>Provider configuration &amp; credentials</summary><p class="mt-3 mb-0 text-700">Environment settings are maintained in <code>bizmatic_django/.env</code>, following <code>.env.example</code>. Fill in your selected provider's model and credentials, then restart Django. Each accounting module has its own <code>ACCOUNTS_PAYABLE_*</code> or <code>ACCOUNTS_RECEIVABLE_*</code> settings. API keys are never shown on this page. Open Help on any workspace page for usage instructions.</p></details></div></div>
+<div class="biz-settings-grid setup-checklists">
+{% for column in setup_columns %}<div class="setup-checklist-column">
+  {% for group in column %}{% include 'document_extraction/includes/setup_card.html' %}{% endfor %}
+</div>{% endfor %}
 </div>
 {% endblock %}
+
+{% block workspace_footer %}<span>Bizmatic · Setup</span><span>Workspace modules and setup guidance</span>{% endblock %}

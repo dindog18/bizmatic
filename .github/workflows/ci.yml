@@ -37,4 +37,4 @@ jobs:
       - name: Check for missing migrations
         run: python bizmatic_django/manage.py makemigrations --check --dry-run
       - name: Run tests
-        run: python bizmatic_django/manage.py test document_extraction --noinput
+        run: python bizmatic_django/manage.py test document_extraction db_extraction router encoder accounts_receivable accounts_payable --noinput

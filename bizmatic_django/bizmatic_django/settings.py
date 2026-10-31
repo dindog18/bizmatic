@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+import json
 from decimal import Decimal
 from pathlib import Path
 
@@ -46,6 +47,7 @@ LOGGING = {
             "level": os.getenv("CONFIG_ASSISTANT_LOG_LEVEL", "INFO").upper(),
             "propagate": False,
         },
+        "encoder": {"handlers": ["extraction_console"], "level": os.getenv("ENCODER_LOG_LEVEL", "INFO").upper(), "propagate": False},
         "router": {
             "handlers": ["extraction_console"],
             "level": os.getenv("ROUTER_LOG_LEVEL", "INFO").upper(),
@@ -92,12 +94,14 @@ INSTALLED_APPS = [
     "accounts_payable.apps.AccountsPayableConfig",
     "accounts_receivable.apps.AccountsReceivableConfig",
     "router.apps.RouterConfig",
+    "encoder.apps.EncoderConfig",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "encoder.middleware.LocalEncoderMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -200,3 +204,9 @@ MAILERS = {
         "BACKEND": "django.core.mail.backends.console.EmailBackend",
     },
 }
+
+
+# Explicitly enabled, loopback-only local MCP workspace with frontend connection configuration.
+ENCODER_LOCAL_ENABLED = os.getenv("ENCODER_LOCAL_ENABLED", "false").lower() in {"1", "true", "yes"}
+# Legacy saved launch profiles only; new connections store their details in the database.
+ENCODER_STDIO_SERVERS = json.loads(os.getenv("ENCODER_STDIO_SERVERS", "{}"))

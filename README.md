@@ -162,3 +162,22 @@ python bizmatic_django/manage.py test document_extraction
 Tests use a separate Django test database. Consult [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes. More detail is available in the [document workspace guide](bizmatic_django/document_extraction/FRONTEND.md), [database extraction guide](bizmatic_django/db_extraction/README.md), [AP/AR guide](bizmatic_django/accounts_receivable/README.md), [query builder guide](bizmatic_django/accounts_receivable/QUERY_BUILDER.md), and [migration guide](bizmatic_django/accounts_receivable/DATABASE_MIGRATION.md).
 
 Text extraction supports text-based PDFs, DOCX, Excel, TXT, and CSV. Scanned PDFs require an OCR workflow; legacy `.doc` files must be converted to `.docx`. Provider and model capabilities vary, and provider calls may incur charges. Static vendor assets and fonts include their own notices in the repository.
+
+### Encoder (local MCP MVP)
+
+The post-routing Encoder workspace at `/encoder/` prepares dynamic MCP tool payloads
+from existing extraction snapshots, with reusable mappings, contextual AI correction,
+schema validation, explicit execution confirmation and durable history. It reuses
+Router handoffs and the shared Falcon UI. It is disabled by default and restricted
+to trusted loopback development. See [Encoder setup and usage](bizmatic_django/encoder/README.md)
+for frontend connection setup, ERP credentials, permitted operations and safe retry behavior.
+
+### Select setup modules
+
+Settings & setup includes a workspace-wide module selection and Encoder checklist.
+Save only the modules you want included in setup counts and “needs setup” banners.
+Inactive modules remain accessible and existing records, routing, and processing
+are unchanged; this selection controls reminders rather than access permissions.
+Database and Encoder reminders are opt-in, while existing document, routing,
+AP/AR and assistant reminders keep their defaults. The Help button provides
+page-specific tours, including MCP connection setup and Encoder execution review.

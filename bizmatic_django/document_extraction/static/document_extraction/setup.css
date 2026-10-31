@@ -1,0 +1,25 @@
+/* Setup-only controls and independent checklist columns inherit the workspace theme. */
+.setup-module-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.setup-module-option { position:relative; display:flex; align-items:center; gap:12px; padding:16px; margin:0; border:1px solid var(--falcon-border-color); border-radius:6px; cursor:pointer; min-width:0; }
+.setup-module-option:hover { border-color:var(--biz-color-action-default); }
+.setup-module-name { flex:1; font-weight:600; }
+.setup-module-input { position:absolute; width:1px; height:1px; opacity:0; }
+.setup-module-toggle { flex:0 0 42px; height:24px; border-radius:24px; background:var(--biz-color-text-secondary); position:relative; }
+.setup-module-toggle::after { content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; border-radius:50%; background:#fff; transition:transform .15s ease; }
+.setup-module-input:checked + .setup-module-toggle { background:var(--biz-color-action-default); }
+.setup-module-input:checked + .setup-module-toggle::after { transform:translateX(18px); }
+.setup-module-input:focus-visible + .setup-module-toggle { outline:2px solid var(--biz-color-action-default); outline-offset:4px; }
+.setup-module-state { width:24px; font-size:12px; color:var(--biz-color-text-secondary); }
+.setup-module-on { display:none; }
+.setup-module-input:checked ~ .setup-module-state .setup-module-on { display:inline; }
+.setup-module-input:checked ~ .setup-module-state .setup-module-off { display:none; }
+.biz-app #page-content .setup-checklists { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; align-items:start; }
+.setup-checklist-column { display:flex; flex-direction:column; gap:24px; min-width:0; }
+.biz-app #page-content .setup-checklist-column > section { margin:0!important; min-width:0; }
+@media(max-width:767px) {
+  .setup-module-options { grid-template-columns:1fr; }
+  .biz-app #page-content .setup-checklists { display:flex; flex-direction:column; gap:16px; }
+  .setup-checklist-column { display:contents; }
+  .setup-checklist-column > section { order:var(--setup-order); width:100%; }
+}
+@media(prefers-reduced-motion:reduce) { .setup-module-toggle::after { transition:none; } }

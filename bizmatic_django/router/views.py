@@ -44,7 +44,7 @@ def workspace(request, screen="queue", record_id=None):
         "logs": "LLM routing history", "log": "Routing attempt",
     }
     if screen in {"destination_edit", "rule_edit"}:
-        get_object_or_404(RoutingDestination if screen == "destination_edit" else RoutingRule, pk=record_id)
+        get_object_or_404(RoutingDestination.objects.filter(is_deleted=False) if screen == "destination_edit" else RoutingRule, pk=record_id)
     routes = {
         name: reverse(f"ROUTER:{name}", args=[0] if name in {"document", "destination_edit", "rule_edit", "log"} else [])
         for name in titles
@@ -52,6 +52,7 @@ def workspace(request, screen="queue", record_id=None):
     api = {"execute": reverse("ROUTER:execute"),
            "configuration": reverse("ROUTER:configuration_save", args=["destinations"]),
            "configurationEdit": reverse("ROUTER:configuration_edit", args=["destinations", 0]),
+           "delete": reverse("ROUTER:configuration_delete", args=["destinations", 0]),
            "toggle": reverse("ROUTER:configuration_toggle", args=["destinations", 0]),
            "review": reverse("ROUTER:route_review", args=[0]),
            "process": reverse("ROUTER:route_process", args=[0]),
@@ -73,13 +74,18 @@ def execute(request):
         completed = sum(log.status == "completed" for log in logs)
         failed = sum(log.status == "failed" for log in logs)
         message = f"Routing finished: {completed} completed, {failed} failed, {len(logs) - completed - failed} still running."
-        statuses = list(DocumentRoute.objects.filter(routing_log__in=logs).values_list("processing_status", flat=True))
+        routes = DocumentRoute.objects.filter(routing_log__in=logs)
+        statuses = list(routes.exclude(destination__module_name="encoder").values_list("processing_status", flat=True))
+        encoder_statuses = list(routes.filter(destination__module_name="encoder").values_list("processing_status", flat=True))
+        encoder = {status: encoder_statuses.count(status) for status in ("completed", "failed", "pending", "processing")}
         accounting = {status: statuses.count(status) for status in ("completed", "failed", "pending", "processing")}
         if statuses:
             message += f" Accounting extraction: {accounting['completed']} completed, {accounting['failed']} failed, {accounting['pending'] + accounting['processing']} waiting."
-        (messages.warning if accounting["failed"] else messages.info)(request, message)
+        if encoder_statuses:
+            message += f" Encoder draft handoff: {encoder['completed']} created, {encoder['failed']} failed. External execution requires review and confirmation."
+        (messages.warning if accounting["failed"] or encoder["failed"] else messages.info)(request, message)
         return {"message": message, "logs": [{"id": row.pk, "status": row.status} for row in logs],
-                "accounting": accounting,
+                "accounting": accounting, "encoder": encoder,
                 "redirect": reverse("ROUTER:document", args=[logs[0].source_document_id]) if len(logs) == 1 else reverse("ROUTER:queue")}
     return _perform(request, run)
 
@@ -134,3 +140,10 @@ def route_add(request, log_id):
 @require_POST
 def log_accuracy(request, log_id):
     return _perform(request, lambda data: {"record": pages.log(records.set_accuracy(log_id, data), full=True)})
+
+
+@require_POST
+def configuration_delete(request, kind, record_id):
+    if kind not in configuration.MODELS:
+        raise Http404
+    return _perform(request, lambda data: {"deleted_id": configuration.delete(kind, record_id, data)})

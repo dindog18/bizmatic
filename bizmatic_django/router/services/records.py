@@ -29,7 +29,11 @@ def review(route_id, data):
         raise ValidationError("Review notes must be text up to 10,000 characters.")
     if decision != "notes":
         _current_attempt(route.routing_log)
-        if route.processing_status in {"processing", "completed"} and decision != "approved":
+        draft_handoff = False
+        if route.destination.module_name == "encoder" and route.processing_status == "completed":
+            from encoder.models import EncoderJob
+            draft_handoff = not EncoderJob.objects.filter(route=route, status__in=["processing", "completed"]).exists()
+        if route.processing_status in {"processing", "completed"} and not draft_handoff and decision != "approved":
             raise ValidationError("This route has begun accounting processing. Review its accounting record before changing the route.")
         route.review_status = decision
     route.review_notes = notes.strip()

@@ -1,0 +1,13 @@
+<section class="card mb-4" id="reset-workspace" aria-labelledby="reset-title">
+  <div class="card-header"><h2 class="fs-9 mb-0" id="reset-title">Start over · keep history</h2></div>
+  <div class="card-body"><p>Reset the current conversation and prepared payload. Keep the source document, selected operation, reusable configurations, and every chat and execution log.</p>
+    <details open><summary>Reset chat and execution workspace</summary>
+      <form method="post" action="{% url 'ENCODER:job_action' job.pk 'reset' %}" class="mt-3">{% csrf_token %}<input type="hidden" name="revision" value="{{ job.updated_at.isoformat }}">
+        <p class="text-600">This starts a new cycle without calling AI or MCP. Previous drafts are saved below. Resetting does not undo external changes; executing again may create duplicates. Unknown outcomes still require verification.</p>
+        <div class="form-check mb-3"><input class="form-check-input" type="checkbox" id="confirm-reset" name="confirmed" value="yes" required><label class="form-check-label" for="confirm-reset">I understand that this clears the local draft and does not undo previous external operations.</label></div>
+        <button class="btn btn-outline-danger" {% if job.status == 'processing' %}disabled{% endif %}>Reset workspace &amp; retain logs</button>
+      </form>
+    </details>
+    {% if reset_history %}<h3 class="fs-10 mt-4">Saved drafts before reset</h3>{% for reset in reset_history %}<details class="mt-2"><summary>Cycle {{ reset.cycle }} · {{ reset.created_at|date:'M j, Y H:i' }}</summary><pre class="encoder-json mt-2">{{ reset.snapshot }}</pre></details>{% endfor %}{% endif %}
+  </div>
+</section>

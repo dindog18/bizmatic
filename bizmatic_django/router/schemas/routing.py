@@ -19,6 +19,7 @@ class RouteMatch(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     destination_id: int = Field(gt=0)
+    rule_id: int | None = Field(default=None, gt=0)
     reason: str = Field(min_length=1, max_length=10000)
     confidence: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
 

@@ -46,9 +46,13 @@ def process(route_id, configuration_id=None, revision=None, *, automatic=False):
     try:
         from accounts_receivable.services.extraction import execute_route
         modes = {"accounts_payable": "ap", "accounts_receivable": "ar"}
-        if route.destination.module_name not in modes:
+        if route.destination.module_name == "encoder":
+            from encoder.services.handoff import create_job
+            create_job(route)
+        elif route.destination.module_name not in modes:
             raise ValidationError("No extraction handler is installed for this module.")
-        execute_route(modes[route.destination.module_name], route, configuration_id, automatic=automatic)
+        else:
+            execute_route(modes[route.destination.module_name], route, configuration_id, automatic=automatic)
     except Exception as error:
         route.processing_status = "failed"
         route.processing_error = "; ".join(error.messages) if isinstance(error, ValidationError) else "Accounting processing failed. Check the configuration and attempt history."

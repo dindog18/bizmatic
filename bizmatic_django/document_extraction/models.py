@@ -81,3 +81,17 @@ class DocExtractionLog(models.Model):
 
     def __str__(self):
         return f"{self.fk_document_no} - {self.doc_log_no}"
+
+
+SETUP_MODULES = ("DOC_EXTRACTION", "ROUTER", "ACCOUNTS_PAYABLE", "ACCOUNTS_RECEIVABLE", "CONFIG_ASSISTANT", "DB_EXTRACTION", "ENCODER")
+
+
+def default_setup_modules():
+    # Preserve existing workspace reminders; database/Encoder setup is opt-in.
+    return list(SETUP_MODULES[:5])
+
+
+class WorkspaceSetupPreferences(models.Model):
+    """Singleton workspace-wide selection for setup reminders, independent of access."""
+    active_modules = models.JSONField(default=default_setup_modules, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)

@@ -1,0 +1,48 @@
+.encoder-json { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32rem; overflow: auto; font-size: .8rem; margin-bottom: 0; }
+.encoder-preview .original-preview { min-height: 24rem; max-height: 40rem; overflow: auto; }
+.encoder-message { white-space: pre-wrap; overflow-wrap: anywhere; }
+.encoder-chat { max-height: 36rem; overflow: auto; }
+.encoder-form { max-width: 50rem; }
+
+.encoder-field-rows { display:grid; gap:.6rem; }
+.encoder-field-row { display:flex; align-items:center; gap:.5rem; }
+.encoder-field-row .form-control { flex:1; min-width:0; }
+.encoder-remove-row { flex:0 0 38px; font-size:1.25rem; }
+.encoder-add-row { width:100%; margin-top:.6rem; }
+.encoder-transport { display:inline-flex; gap:.25rem; padding:.25rem; background:var(--biz-color-selection-bg); border-radius:.5rem; }
+.encoder-transport button[aria-pressed="true"] { background:var(--biz-color-action-default); color:var(--biz-color-text-inverse, #fff); }
+.encoder-transport button:focus-visible { outline:2px solid var(--biz-color-action-default); outline-offset:2px; }
+[data-connection-form] [data-field="transport"] { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+[data-connection-form] [data-field="transport"] > label { margin:0; }
+.encoder-chat-context,.encoder-chat-meta { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; font-size:12px; color:var(--biz-color-text-secondary); }
+.encoder-chat-context span { border:1px solid var(--falcon-border-color); border-radius:4px; padding:4px 8px; }
+.encoder-assistant .encoder-chat { padding:16px 24px; max-height:38rem; overflow:auto; scroll-padding:16px; }
+.encoder-chat-message { border:1px solid var(--falcon-border-color); border-radius:8px; padding:16px; margin:0 48px 16px 0; background:var(--biz-color-bg-surface); }
+.encoder-chat-message-user { margin-left:48px; margin-right:0; background:var(--biz-color-selection-bg); }
+.encoder-chat-meta { margin-bottom:8px; }
+.encoder-chat-proposal { border-top:1px solid var(--falcon-border-color); padding-top:12px; margin-top:12px; }
+.encoder-chat-empty { text-align:center; padding:32px 16px; }
+.encoder-chat-message:last-child { margin-bottom:0; }
+@media(max-width:767px) { .encoder-assistant .encoder-chat { padding:16px; }.encoder-chat-message { margin-left:0; margin-right:0; } }
+
+/* Structured review keeps missing inputs separate from AI-prepared values. */
+.encoder-data-review { border:1px solid var(--falcon-border-color); border-radius:8px; padding:20px; background:var(--biz-color-bg-surface); }
+.encoder-review-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:20px; }
+.encoder-review-columns { display:grid; grid-template-columns:minmax(0, 1.3fr) minmax(0, 1fr); gap:24px; }
+.encoder-value-list { margin:0; max-height:26rem; overflow:auto; }
+.encoder-value-list > div { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:16px; padding:10px 0; border-bottom:1px solid var(--falcon-border-color); }
+.encoder-value-list dt { font-size:12px; font-weight:500; color:var(--biz-color-text-secondary); overflow-wrap:anywhere; }
+.encoder-value-list dd { margin:0; font-size:13px; font-weight:600; overflow-wrap:anywhere; }
+.encoder-input-needed { border-left:3px solid var(--falcon-warning); padding-left:16px; min-width:0; }
+.encoder-missing-field { display:grid; gap:6px; padding:12px 0; border-bottom:1px solid var(--falcon-border-color); }
+.encoder-missing-field strong { font-size:13px; }
+.encoder-missing-field code { font-size:11px; overflow-wrap:anywhere; }
+.encoder-missing-field button { justify-self:start; min-height:36px; }
+.encoder-review-warnings { padding:16px; border:1px solid var(--falcon-warning); border-radius:6px; font-size:13px; }
+.encoder-chat-message-assistant { margin-right:0; }
+.encoder-chat-message .encoder-data-review { padding:16px; }
+.encoder-explanation .encoder-message { white-space:normal; }
+.encoder-explanation summary { font-size:13px; cursor:pointer; }
+@media(max-width:767px) { .encoder-review-columns { grid-template-columns:minmax(0,1fr); }.encoder-review-heading { flex-wrap:wrap; }.encoder-data-review { padding:16px; }.encoder-missing-field button { min-height:44px; } }
+.encoder-review-columns > section { padding:0; margin:0; }
+.encoder-review-columns > .encoder-input-needed { padding-left:16px; }

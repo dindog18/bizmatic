@@ -57,6 +57,7 @@
   ui.app.addEventListener("change", event => {
     const target = event.target;
     if (target.matches("select[data-filter]")) { ui.filters[target.dataset.filter] = target.value; ui.filters.page = 1; ui.render(); }
+    if (target.id === "router-destination" || target.id === "router-encoder-connection") ui.changeEncoderScope(target.form);
     if (target.id === "router-module_name") ui.changeDestinationModule(target.form);
     if (target.closest("#router-config-form")) ui.configurationDirty = true;
   });
@@ -69,6 +70,7 @@
       switch (button.dataset.action) {
       case "clear-filters": ui.filters = { q: "", status: "", module: "", page: 1 }; ui.render(); break;
       case "page": ui.filters.page = Number(button.dataset.page); ui.render(); break;
+      case "delete-configuration": ui.showDeleteConfiguration(button.dataset.kind, id); break;
       case "toggle": {
         const row = ui.state[button.dataset.kind].find(item => item.id === id);
         const saved = await ui.post(ui.apiURL("toggle", row.id, button.dataset.kind), { is_active: !row.is_active, revision: row.revision });
@@ -78,14 +80,15 @@
       }
       case "process": {
         const route=ui.state.routes.find(row=>row.id===id);
+        const encoder=ui.destination(route.destination_id)?.module_name === "encoder";
         const value=document.getElementById(`route-profile-${id}`).value;
         button.disabled = true;
-        button.textContent = "Extracting…";
-        ui.notice("Processing the AP/AR extraction… Please wait for the saved result.");
+        button.textContent = encoder ? "Creating draft…" : "Extracting…";
+        ui.notice(encoder ? "Creating an Encoder draft… No external operation will run." : "Processing the AP/AR extraction… Please wait for the saved result.");
         try {
           const saved=await ui.post(ui.apiURL("process",id), {revision:route.revision, configuration_id:value?Number(value):null});
           Object.assign(route,saved);
-          ui.notice(`Accounting processing: ${route.processing_status}${route.processing_error ? '. ' + route.processing_error : ''}`,route.processing_status==='failed');
+          ui.notice(`${encoder ? "Encoder draft handoff" : "Accounting processing"}: ${route.processing_status}${route.processing_error ? '. ' + route.processing_error : ''}`,route.processing_status==='failed');
         } finally { ui.render(); }
         break;
       }
@@ -115,6 +118,24 @@
   ui.app.addEventListener("submit", async event => {
     event.preventDefault();
     const form = event.target;
+    if (form.id === "router-delete-form") {
+      const button = form.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        await ui.request(ui.apiURL('delete', form.dataset.id, form.dataset.kind), {revision: form.dataset.revision, confirmed: true, delete_associated_rules: form.dataset.kind === "destinations"});
+        ui.state[form.dataset.kind] = ui.state[form.dataset.kind].filter(row => row.id !== Number(form.dataset.id));
+        if (form.dataset.kind === "destinations") ui.state.rules = ui.state.rules.filter(row => row.destination_id !== Number(form.dataset.id));
+        document.getElementById('router-dialog').close();
+        if (ui.config.screen === 'destination_edit' || ui.config.screen === 'rule_edit') {
+          ui.configurationDirty = false;
+          location.assign(ui.url(form.dataset.kind));
+        } else { ui.render(); ui.notice('Configuration deleted. Past routing history is retained.'); }
+      } catch (error) {
+        const message = document.getElementById('router-delete-error');
+        message.textContent = error.message; message.hidden = false; message.focus();
+      } finally { button.disabled = false; }
+      return;
+    }
     if (form.id === "router-rerun-form") { await ui.submitRerun(form); return; }
     if (form.id === "router-config-form") ui.submitConfiguration(form);
     try {

@@ -1,0 +1,18 @@
+{% extends 'document_extraction/base.html' %}{% load static %}
+{% block extra_styles %}<link rel="stylesheet" href="{% static 'accounting/workspace.css' %}?v=order-amounts-1"><link rel="stylesheet" href="{% static 'encoder/workspace.css' %}?v=data-review-2">{% endblock %}
+{% block workspace_title %}Encoder workspace{% endblock %}
+{% block workspace_footer %}<span>Bizmatic · Encoder</span><span>Review, validate, confirm</span>{% endblock %}
+{% block breadcrumbs %}
+<div class="finance-workspace">
+  <div class="finance-workspace-top"><span class="finance-eyebrow">ENCODER WORKSPACE</span><span class="finance-demo-label"><span class="fas fa-file-alt me-1" aria-hidden="true"></span> Routed documents</span></div>
+  {% with current=request.resolver_match.url_name %}
+  <nav class="finance-nav" aria-label="Encoder navigation">
+    <a href="{% url 'ENCODER:dashboard' %}"{% if current == 'dashboard' or current == 'workspace' %} class="active" aria-current="page"{% endif %}>Document queue</a>
+    <a href="{% url 'ENCODER:connections' %}"{% if current == 'connections' or current == 'connection_create' or current == 'connection_edit' or current == 'connection_detail' or current == 'mapping_edit' %} class="active" aria-current="page"{% endif %}>MCP connections</a>
+    <a href="{% url 'ENCODER:history' %}"{% if current == 'history' or current == 'execution_detail' %} class="active" aria-current="page"{% endif %}>Execution history</a>
+    <a href="{% url 'ENCODER:llm_logs' %}"{% if current == 'llm_logs' or current == 'llm_log_detail' %} class="active" aria-current="page"{% endif %}>LLM activity</a>
+  </nav>
+  {% endwith %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'encoder/workspace.js' %}?v=data-review-2" defer></script>{% endblock %}
