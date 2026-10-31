@@ -157,7 +157,7 @@ class PayloadForm(StyledForm):
                 field = forms.TypedChoiceField(choices=[("", "Not supplied"), ("true", "Yes"), ("false", "No")], coerce=json.loads, empty_value=None, **common)
                 initial = json.dumps(job.prepared_payload[name]) if name in job.prepared_payload else ""
             else:
-                cls = {"integer": forms.IntegerField, "number": forms.FloatField, "string": forms.CharField}.get(kind, forms.JSONField)
+                cls = {"integer": forms.IntegerField, "number": forms.FloatField, "string": forms.CharField}.get(kind, forms.JSONField) if isinstance(kind, str) else forms.JSONField
                 field = cls(**common)
                 if cls is forms.JSONField:
                     field.widget = forms.Textarea(attrs={"rows": 3})

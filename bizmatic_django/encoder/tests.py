@@ -396,6 +396,15 @@ class EncoderTests(TestCase):
         self.assertEqual(form.payload(job), {"currency": "USD", "approved": False, "lines": []})
         self.assertIn("<select", str(form["value_0"]))
 
+    def test_nullable_union_schema_renders_workspace_and_accepts_json_value(self):
+        self.job.tool_schema = {"type": "object", "properties": {"reference": {"type": ["string", "null"]}}}
+        self.job.save()
+        response = self.client.get(reverse("ENCODER:workspace", args=[self.job.pk]))
+        self.assertEqual(response.status_code, 200)
+        form = PayloadForm({"revision": self.job.updated_at.isoformat(), "value_0": '"ABC"'}, job=self.job)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.payload(self.job), {"reference": "ABC"})
+
     def test_mapping_selectors_build_reusable_rules_and_profile_is_not_an_arbitrary_command(self):
         from .forms import ConnectionForm
         self.ready()
